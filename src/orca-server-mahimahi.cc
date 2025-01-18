@@ -64,6 +64,7 @@ int main(int argc, char **argv)
     downlink=argv[7];
     uplink=argv[8];
     delay_ms=atoi(argv[9]);
+    base_rtt = (delay_ms*2/100 - min_base_rtt)/(max_base_rtt - min_base_rtt);
     log_file=argv[10];
     duration=atoi(argv[11]);
     qsize=atoi(argv[12]);
@@ -363,7 +364,7 @@ void* CntThread(void* information)
         DBGPRINT(0,0,"Cannot get priority for the Data thread: %s\n",strerror(errno));
     }
     */
-	int ret1;
+	int ret1, ret2;
     double min_rtt_=0.0;
     double pacing_rate=0.0;
     double lost_bytes=0.0;
@@ -401,10 +402,12 @@ void* CntThread(void* information)
     char*alpha;
     char*save_ptr;
     int got_no_zero=0;
-    uint64_t t0,t1;
+    uint64_t t0,t1,t2;
     t0=timestamp();
     //Time to start the Logic
     struct tcp_orca_info tcp_info_pre;
+    // struct tcp_sage_info sage_info_pre;
+    FILE *log_fp = fopen("rl_logging/sage_info.txt", "w");
     tcp_info_pre.init();
     int get_info_error_counter=0;
     int actor_is_dead_counter=0;
@@ -426,6 +429,7 @@ void* CntThread(void* information)
                 if(orca_info.avg_urtt>0)
                 {
                     t1=timestamp();
+                    fprintf(log_fp, "t1 %d\n", t1);
                     
                     double time_delta=(double)(t1-t0)/1000000.0;
                     double delay=(double)orca_info.avg_urtt/1000.0;
@@ -438,6 +442,26 @@ void* CntThread(void* information)
                     packets_out=(double)(orca_info.packets_out);
                     retrans_out=(double)(orca_info.retrans_out);
                     max_packets_out=(double)(orca_info.max_packets_out);
+
+
+                    ret2 = get_sage_info(sock_for_cnt[i], &sage_info);
+                    if (ret2 < 0) {
+                        DBGMARK(0,0,"setsockopt: for index:%d flow_index:%d TCP_C2TCP ... %s (ret2:%d)\n",
+                                i, flow_index, strerror(errno), ret1);
+                        return((void *)0);
+                    }
+                    // Embedder input: base_rtt, (double)sage_info.rtt/100000.0, (double)sage_info.rttvar/1000.0, (double)sage_info.delivery_rate/125000.0/BW_NORM_FACTOR, l_w_mbps/BW_NORM_FACTOR, (cwnd_rate>0.0)?round(log2f(cwnd_rate)*1000)/1000.:log2f(0.0001))
+                    if (sage_info.rtt > 0) {
+                        t2=timestamp();
+                        fprintf(log_fp, "t2 %d\n", t2);
+                        fprintf(log_fp, "base_rtt: %f\n", base_rtt);
+                        fprintf(log_fp, "sage_info.rtt: %f\n", sage_info.rtt/100000.0);
+                        fprintf(log_fp, "sage_info.rttvar: %f\n", sage_info.rttvar/1000.0);
+                        fprintf(log_fp, "sage_info.delivery_rate: %f\n", sage_info.delivery_rate/125000.0/BW_NORM_FACTOR);
+                        // fprintf(log_fp, "l_w_mbps: %d\n", l_w_mbps/BW_NORM_FACTOR);
+                    }
+
+
 
                     report_period=20;
                     if (!slow_start_passed)
@@ -566,6 +590,7 @@ void* CntThread(void* information)
     shmctl(shmid, IPC_RMID, NULL);
     shmdt(shared_memory_rl);
     shmctl(shmid_rl, IPC_RMID, NULL);
+    fclose(log_fp);
     return((void *)0);
 }
 void* DataThread(void* info)

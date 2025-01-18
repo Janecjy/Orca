@@ -1,2 +1,4 @@
 rl-module/log/*
 rl-module/train_dir/*
+rl-module/__pycache__/*
+rl_logging/*
