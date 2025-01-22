@@ -306,6 +306,7 @@ def main():
             params.dict['ckptdir'] = tfeventdir
 
         tfconfig = tf.ConfigProto(allow_soft_placement=True)
+        print("Checkpoint dir:", params.dict['ckptdir'])
 
         if params.dict['single_actor_eval']:
             mon_sess = tf.train.SingularMonitoredSession(
@@ -394,6 +395,7 @@ def main():
 
                     step_counter += 1
                     s1, r, terminal, error_code = env.step(a,eval_=config.eval)
+                    # print(f"s1: {s1}, r: {r}, terminal: {terminal}, error_code: {error_code}")
 
                     if error_code == True:
                         s1_rec_buffer = np.concatenate( (s0_rec_buffer[params.dict['state_dim']:], s1) )

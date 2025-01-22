@@ -67,48 +67,58 @@ class Seq2SeqWithEmbeddingmodClass(nn.Module):
         self.softmax = nn.Softmax(dim=-1)  # Apply softmax over the class dimension
         self.relu = nn.ReLU()
 
-    def forward(self,
-                src: Tensor,
-                trg: Tensor,
-                src_mask: Tensor,
-                tgt_mask: Tensor,
-                src_padding_mask: Tensor,
-                tgt_padding_mask: Tensor,
-                memory_key_padding_mask: Tensor):
-        # 1) Embed + positional encode the source
+    def forward(
+        self,
+        src: Tensor,
+        trg: Tensor,
+        src_mask: Tensor,
+        tgt_mask: Tensor,
+        src_padding_mask: Tensor,
+        tgt_padding_mask: Tensor,
+        memory_key_padding_mask: Tensor
+    ):
+        # 1) embed
         src = src.float()
         src = self.relu(self.embed_layer2(self.relu(self.embed_layer1(src))))
-        src = src.permute(1, 0, 2)  # shape -> [seq_len, batch_size, emb_size]
-        src_pos = self.positional_encoding(src)  # [seq_len, batch_size, emb_size]
-
-        # 2) Run the encoder
-        memory = self.transformer.encoder(
-            src_pos,
-            mask=src_mask, 
-            src_key_padding_mask=src_padding_mask
-        )
-        # 'memory' shape: [seq_len_src, batch_size, emb_size]
-
-        # 3) Embed + positional encode the target
-        trg = trg.float()
         trg = self.relu(self.embed_layer2(self.relu(self.embed_layer1(trg))))
-        trg = trg.permute(1, 0, 2)  # [seq_len_tgt, batch_size, emb_size]
+
+        # 2) (batch, seq, emb) -> (seq, batch, emb)
+        src = src.permute(1, 0, 2)
+        trg = trg.permute(1, 0, 2)
+
+        # 3) positional encoding
+        src_pos = self.positional_encoding(src)  # shape [seq, batch, emb]
         tgt_pos = self.positional_encoding(trg)
 
-        # 4) Run the decoder
+        # 4) revert to (batch, seq, emb)
+        src_pos = src_pos.permute(1, 0, 2)  # [batch, seq, emb]
+        tgt_pos = tgt_pos.permute(1, 0, 2)
+
+        # 5) run the transformer
+        # 5a) switch shape back to [seq, batch, emb] for the encoder call
+        # src_pos = src_pos.permute(1, 0, 2)  # => [seq, batch, emb]
+        memory = self.transformer.encoder(
+            src_pos,
+            mask=src_mask,
+            src_key_padding_mask=src_padding_mask
+        )  # shape [seq, batch, emb]
+
+        # 5b) decode 
+        # decode expects the memory as [seq, batch, emb] if batch_first=False 
+        # so do the same for tgt_pos
+        # tgt_pos = tgt_pos.permute(1, 0, 2)  # => [seq, batch, emb]
         decoder_out = self.transformer.decoder(
             tgt_pos,
             memory,
             tgt_mask=tgt_mask,
             memory_key_padding_mask=memory_key_padding_mask,
             tgt_key_padding_mask=tgt_padding_mask
-        )
-        # 'decoder_out' shape: [seq_len_tgt, batch_size, emb_size]
+        )  # => [seq, batch, emb]
 
-        # 5) Final projection + softmax
-        #    (Typically you only apply this to decoder_out.)
-        decoder_out = decoder_out.permute(1, 0, 2)  # [batch_size, seq_len_tgt, emb_size]
+        # 6) final projection
+        decoder_out = decoder_out.permute(1, 0, 2)  # => [batch, seq, emb]
         logits = self.relu(self.de_embed_layer2(self.relu(self.de_embed_layer1(decoder_out))))
         probs = self.softmax(logits)
 
-        return probs, memory  # Return both final output & encoder output
+        # now we can return both
+        return probs, memory

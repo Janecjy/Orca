@@ -130,7 +130,7 @@ class TCP_Env_Wrapper(object):
             self.max_token_window_size = 10
             # This will hold the embedding you append to the RL state.
             # Initialize to zeros so if we haven't got 10 tokens yet, we use a zero-vector
-            self.embedding_size = 64
+            self.embedding_size = 16
             self.current_transformer_embedding = np.zeros(self.embedding_size, dtype=np.float32)
 
             # If you already know global min/max for base_rtt from offline analysis,
@@ -198,7 +198,7 @@ class TCP_Env_Wrapper(object):
         # Sum up (feature * dt) for each entry
         total_time = 0.0
         weighted_sum = np.zeros(6, dtype=np.float64)
-        logger.info(f"raw_feature_buffer: {self.raw_feature_buffer}")
+        # logger.info(f"raw_feature_buffer: {self.raw_feature_buffer}")
         for (f6, dt) in self.raw_feature_buffer:
             weighted_sum += f6 * dt
             total_time += dt
@@ -209,10 +209,10 @@ class TCP_Env_Wrapper(object):
         else:
             avg_features = weighted_sum / total_time
 
-        logger.info(f"avg_features: {avg_features}")
+        # logger.info(f"avg_features: {avg_features}")
 
         # avg_features[0] is base_rtt. We min-max normalize it:
-        base_rtt_val = avg_features[0]*2
+        base_rtt_val = avg_features[0]*2/100
         if np.isclose(self.rtt_min, self.rtt_max):
             normalized_rtt = 0.0
         else:
@@ -237,20 +237,35 @@ class TCP_Env_Wrapper(object):
         # Convert self.token_window -> shape (1, 10, 6)
         tokens_np = np.stack(self.token_window, axis=0)  # shape [10, 6]
         tokens_tensor = torch.from_numpy(tokens_np).unsqueeze(0).to(self.DEVICE)  # [1, 10, 6]
-        logger.info("tokens_tensor: "+str(tokens_tensor))
+        # logger.info("tokens_tensor: "+str(tokens_tensor))
 
         self.transformer_model.eval()
         with torch.no_grad():
+            # Example forward pass. Because we have a Seq2Seq, we need a dummy trg.
+            # We'll do something minimal. Real usage might differ.
 
-            final_out, encoder_out = self.transformer_model(tokens_tensor, ...)
-            logger.info("encoder_out: "+str(encoder_out))
+            enc_input = tokens_tensor[:, :, :].to(self.DEVICE)
+            dec_input = (1.5 * torch.ones((tokens_tensor.shape[0], 10, tokens_tensor.shape[2]))).to(self.DEVICE)
+            src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=2, device=self.DEVICE)
+            
+            # We pass None for padding masks:
+            out_probs, encoder_out = self.transformer_model(
+                enc_input, dec_input, 
+                src_mask=src_mask, 
+                tgt_mask=tgt_mask,
+                src_padding_mask=None, 
+                tgt_padding_mask=None, 
+                memory_key_padding_mask=None
+            )
+
+            # logger.info("encoder_out: "+str(encoder_out))
             # shape: [1, 10, 64]
 
             # You can pick how to compress 10 steps into 1 vector:
             # e.g. average pooling across time
             # [1, 32]
             embedding_tensor = encoder_out.mean(dim=1)
-            logger.info("embedding_tensor: "+str(embedding_tensor))
+            # logger.info("embedding_tensor: "+str(embedding_tensor))
 
             # move to CPU and NumPy
             emb_cpu = embedding_tensor.squeeze(0).cpu().numpy()  # shape [32]
@@ -312,14 +327,14 @@ class TCP_Env_Wrapper(object):
         reward=0
         state=np.zeros(1)
         w=s0
-        # logger.info("s0: "+str(s0))
-        # logger.info("s0 length: "+str(len(s0)))
+        logger.info("s0: "+str(s0))
+        logger.info("s0 length: "+str(len(s0)))
         if len(s0) == (self.params.dict['input_dim']):
             d=s0[0]
             thr=s0[1]
             samples=s0[2]
             delta_t=s0[3]
-            logger.info("delta_t: "+str(delta_t))
+            # logger.info("delta_t: "+str(delta_t))
             target_=s0[4]
             cwnd=s0[5]
             pacing_rate=s0[6]
@@ -414,18 +429,18 @@ class TCP_Env_Wrapper(object):
             #    if we've reached base_rtt)
             raw_6_features = s0[-6:]
             self.raw_feature_buffer.append((raw_6_features, delta_t))
-            self.accumulated_time += delta_t
+            self.accumulated_time += delta_t*10
             
             new_token_created = False
             if not self.base_rtt:
-                self.base_rtt = raw_6_features[0]*2  # set the base_rtt once
+                self.base_rtt = raw_6_features[0]*2/100  # set the base_rtt once in 100x ms
 
             logger.info("accumulated_time: "+str(self.accumulated_time))
-            logger.info("base_rtt: "+str(self.base_rtt))
+            # logger.info("base_rtt: "+str(self.base_rtt))
             if self.accumulated_time >= self.base_rtt > 0:
                 # We have enough data for 1 token
                 token = self.compute_token()
-                logger.info("New token: "+str(token))
+                # logger.info("New token: "+str(token))
                 self.token_window.append(token)
                 if len(self.token_window) > self.max_token_window_size:
                     self.token_window.pop(0)
@@ -446,10 +461,9 @@ class TCP_Env_Wrapper(object):
 
             # state is currently something like shape (N,).
             # We'll do:
-            # state = np.concatenate([state, self.current_transformer_embedding], axis=0)
 
-            logger.info("aggreated time: "+str(self.accumulated_time))
             logger.info(f"transformer_embedding: {self.current_transformer_embedding}")
+            state = np.concatenate([state, self.current_transformer_embedding], axis=0)
 
             self.prev_rid = rid
             return state, d, reward, True
