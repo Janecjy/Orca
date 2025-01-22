@@ -412,6 +412,14 @@ void* CntThread(void* information)
     int get_info_error_counter=0;
     int actor_is_dead_counter=0;
     int tmp_step=0;
+    double l_w_mbps=0.0;
+    u64 pre_pkt_lost = 0;
+    u64 dt=0; 
+    u64 dt_pre=timestamp();
+    double cwnd_rate;
+    u32 pre_cwnd=10;
+    dq_sage<u64>  sent_dt(100);
+    dq_sage<u64>  loss_db(100);
     while(send_traffic)  
 	{
        for(int i=0;i<flow_index;i++)
@@ -452,16 +460,32 @@ void* CntThread(void* information)
                     }
                     // Embedder input: base_rtt, (double)sage_info.rtt/100000.0, (double)sage_info.rttvar/1000.0, (double)sage_info.delivery_rate/125000.0/BW_NORM_FACTOR, l_w_mbps/BW_NORM_FACTOR, (cwnd_rate>0.0)?round(log2f(cwnd_rate)*1000)/1000.:log2f(0.0001))
                     if (sage_info.rtt > 0) {
-                        t2=timestamp();
-                        fprintf(log_fp, "t2 %d\n", t2);
+                        dt = timestamp()- dt_pre;
+                        dt = (dt>0)?dt:1;
+                        dt_pre = timestamp();
+                        u64 l_db = (sage_info.lost>pre_pkt_lost)?(sage_info.lost - pre_pkt_lost)*sage_info.snd_mss:0;
+                        loss_db.add(l_db);
+                        pre_pkt_lost = sage_info.lost;
+                        sent_dt.add(dt);
+                        u64 dt_sum = sent_dt.sum();
+                        l_w_mbps  = (double)8*loss_db.sum()/dt_sum;
+                        if(pre_cwnd>0)
+                        {
+                            cwnd_rate = (double) sage_info.snd_cwnd/pre_cwnd;
+                        }
+                        else{
+                            cwnd_rate = 0;
+                        }
+                        pre_cwnd = sage_info.snd_cwnd;
+                        fprintf(log_fp, "dt_pre %d\n", t2);
                         fprintf(log_fp, "base_rtt: %f\n", base_rtt);
                         fprintf(log_fp, "sage_info.rtt: %f\n", sage_info.rtt/100000.0);
                         fprintf(log_fp, "sage_info.rttvar: %f\n", sage_info.rttvar/1000.0);
                         fprintf(log_fp, "sage_info.delivery_rate: %f\n", sage_info.delivery_rate/125000.0/BW_NORM_FACTOR);
-                        // fprintf(log_fp, "l_w_mbps: %d\n", l_w_mbps/BW_NORM_FACTOR);
+                        // fprintf(log_fp, "loss_db.sum(): %d, dt_sum: %d\n", loss_db.sum(), dt_sum);
+                        fprintf(log_fp, "l_w_mbps: %f\n", l_w_mbps/BW_NORM_FACTOR);
+                        fprintf(log_fp, "cwnd_rate: %f\n", cwnd_rate);
                     }
-
-
 
                     report_period=20;
                     if (!slow_start_passed)

@@ -34,6 +34,7 @@ pthread_mutex_t lockit;
 #include <time.h>
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
+#include <deque>
 
 //Shared Memory ==> Communication with RL-Module -----*
 #include <stdio.h>
@@ -374,4 +375,170 @@ void handler(int sig) {
     shmctl(shmid_rl, IPC_RMID, NULL);
     exit(1);
 }
+
+template<class T>
+class dq_sage {
+    std::deque<T>* dq;
+    T default_max;
+    u32 size;
+    std::deque<T>* dq_min;
+    std::deque<T>* dq_max;
+    //std::deque<double>* dq_avg;
+    double average;
+    u32 length;
+    public:
+        dq_sage(u32 size)
+        {
+            init(size);
+        };
+        void init(u32 size,T default_max)
+        {
+            this->size = size;
+            this->defualt_max = default_max;
+            dq = new std::deque<T>;
+            dq_min = new std::deque<T>;
+            dq_max = new std::deque<T>;
+            //dq_avg = new std::deque<double>;
+            this->average = 0;
+        };
+        void init(u32 size)
+        {
+            this->size = size;
+            dq = new std::deque<T>;
+            this->default_max = (T)100;   //100Mbps
+            dq_min = new std::deque<T>;
+            dq_max = new std::deque<T>;
+            //dq_avg = new std::deque<double>;
+            this->average = 0;
+        };
+        T get_min()
+        {
+            return (this->dq_min->size())?this->dq_min->front():1e6;
+        }
+        T get_max()
+        {
+            return (this->dq_max->size())?this->dq_max->front():0;
+        }
+        double get_avg()
+        {
+            return this->average;
+        }
+        T get_sum()
+        {
+            return (T)(get_avg()*this->dq->size());
+        }
+        int add(T entry)
+        {
+            T new_min = get_min();
+            T new_max = get_max();
+            u32 len = this->dq->size();
+            if(entry<new_min)
+            {
+                new_min = entry;
+            }
+            if(entry>new_max)
+            {
+                new_max = entry;
+            }
+
+            if(len>=this->size)
+            {  
+                T to_be_removed = this->dq->back();
+                this->dq->pop_back();
+                this->average = (this->average*len-(double)to_be_removed+(double)entry)/(len);
+
+                if(to_be_removed==get_min())
+                {
+                    new_min = min();
+                    if(entry<new_min)
+                        new_min = entry;
+                }
+                this->dq_min->pop_back();
+                this->dq_min->push_front(new_min);
+               
+                if(to_be_removed==get_max())
+                {
+                    new_max = max();
+                    if(entry>new_max)
+                        new_max = entry;
+                }
+                this->dq_max->pop_back(); 
+                this->dq_max->push_front(new_max);
+                
+                //this->dq->pop_back();
+                this->dq->push_front(entry);
+            }
+            else
+            {
+                this->average = (len)?(this->average*len+(double)entry)/(len+1):entry;
+                this->dq_min->push_front(new_min);
+                this->dq_max->push_front(new_max);
+                this->dq->push_front(entry);
+            }
+        };
+        T max()
+        {
+            T max=0;
+            int occupancy=0;
+            typename std::deque<T>::iterator it;
+            for(it=this->dq->begin(); it!=this->dq->end(); it++)
+            {
+                if(max<*it)
+                {
+                    max=*it;
+                }
+                //occupancy++;
+            }
+            return max;
+        };
+        T min()
+        {
+            T min=1e6;
+            typename std::deque<T>::iterator it;
+            for(it=this->dq->begin(); it!=this->dq->end(); it++)
+            {
+                if(min>*it)
+                {
+                    min=*it;
+                }
+            }
+            return min;
+        };
+        T sum()
+        {
+            T sum = 0;
+            typename std::deque<T>::iterator it;
+            for(it=this->dq->begin(); it!=this->dq->end(); it++)
+            {
+                sum += *it;                                              
+            }
+            return sum;                                                             
+        }
+        T avg()
+        {
+            T sum = 0;
+            u32 counter=0;
+            typename std::deque<T>::iterator it;
+            for(it=this->dq->begin(); it!=this->dq->end(); it++)
+            {
+                sum += *it;                                             
+                counter++;
+            }
+            return (counter)?(T)sum/counter:0;
+        }
+        void std(T& mean,T& std)
+        {
+            mean = avg();
+            T var = 0;
+            u32 counter=0;
+            typename std::deque<T>::iterator it;
+            for(it=this->dq->begin(); it!=this->dq->end(); it++)
+            {
+                var += (mean-*it)*(mean-*it);
+                counter++;
+            }
+            std = var/counter;
+            std = sqrt(std);
+        }
+};
 
