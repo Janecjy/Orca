@@ -21,6 +21,7 @@ SOFTWARE.
 '''
 
 import numpy as np
+import torch
 import gym
 import math
 import collections
@@ -30,6 +31,7 @@ import sysv_ipc
 import signal
 import sys
 from time import sleep
+from models import create_mask
 
 class Env_Wrapper(object):
     def __init__(self, name):
@@ -121,6 +123,32 @@ class TCP_Env_Wrapper(object):
             self.max_cwnd = 0.0
             self.max_smp = 0.0
             self.min_del = 9999999.0
+            # -------------- NEW FIELDS for Palantir --------------
+            self.raw_feature_buffer = []    # Will store (raw_6_features, delta_t)
+            self.accumulated_time = 0.0     # Track time since last token
+            self.token_window = []          # Rolling window of up to 10 tokens
+            self.max_token_window_size = 10
+            # This will hold the embedding you append to the RL state.
+            # Initialize to zeros so if we haven't got 10 tokens yet, we use a zero-vector
+            self.embedding_size = 64
+            self.current_transformer_embedding = np.zeros(self.embedding_size, dtype=np.float32)
+
+            # If you already know global min/max for base_rtt from offline analysis,
+            # set them here; or you can track them online if you prefer:
+            self.rtt_min = 0.1
+            self.rtt_max = 1.6
+            self.base_rtt = 0.0
+
+            # A reference to your trained Transformer model
+            self.DEVICE = 'cpu'
+            self.transformer_model = torch.load('models/RTT-Checkpoint-BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-809iter.p', map_location=self.DEVICE)
+            self.bucket_boundaries_ccbench = {
+                1: [0.12, 0.2, 0.28, 0.43, 0.55, 0.83, 1.03, 1.63, 2.12, 4.02, 8, 12],
+                2: [0.01, 0.3, 0.38, 0.44, 0.49, 0.54, 0.6, 0.68, 0.84, 1.41, 3, 5],
+                3: [0.08, 0.11, 0.15, 0.23, 0.45, 0.8, 0.9, 1, 1.75],
+                4: [0.0002, 0.0047, 0.0361, 0.1, 0.2, 0.3],
+                5: [0.75, 1, 1.001, 1.003, 1.012, 1.25]
+            }
 
             self.use_normalizer=use_normalizer
             if self.use_normalizer==True:
@@ -160,6 +188,73 @@ class TCP_Env_Wrapper(object):
     def test(self):
         print("Hello")
 
+    def compute_token(self):
+        """
+        raw_feature_buffer: list of [(f6, dt), ...] 
+                            where f6 is np.array of shape (6,) 
+                            and dt is float
+        Returns: a single token of shape (6,)
+        """
+        # Sum up (feature * dt) for each entry
+        total_time = 0.0
+        weighted_sum = np.zeros(6, dtype=np.float64)
+        logger.info(f"raw_feature_buffer: {self.raw_feature_buffer}")
+        for (f6, dt) in self.raw_feature_buffer:
+            weighted_sum += f6 * dt
+            total_time += dt
+
+        if total_time < 1e-9:
+            # Avoid div-by-zero; fallback to the last sample or zeros
+            avg_features = self.raw_feature_buffer[-1][0]
+        else:
+            avg_features = weighted_sum / total_time
+
+        logger.info(f"avg_features: {avg_features}")
+
+        # avg_features[0] is base_rtt. We min-max normalize it:
+        base_rtt_val = avg_features[0]*2
+        if np.isclose(self.rtt_min, self.rtt_max):
+            normalized_rtt = 0.0
+        else:
+            normalized_rtt = (base_rtt_val - self.rtt_min) / (self.rtt_max - self.rtt_min)
+        
+        # For features 1..5, do bucketization
+        # feature 1 = avg_features[1], feature 2 = avg_features[2], ...
+        # boundaries are in your self.bucket_boundaries_ccbench dictionary
+        token = [normalized_rtt]  # first slot is normalized base_rtt
+        for feat_idx in range(1, 6):
+            boundaries = self.bucket_boundaries_ccbench[feat_idx]
+            val = avg_features[feat_idx]
+            # local bin index
+            bin_local = np.searchsorted(boundaries, val, side='right')
+            # We often want to offset these bins in a big vocabulary,
+            # but for a single token we can just store bin_local directly
+            token.append(bin_local)
+        
+        return np.array(token, dtype=np.float32)
+
+    def update_transformer_embedding(self):
+        # Convert self.token_window -> shape (1, 10, 6)
+        tokens_np = np.stack(self.token_window, axis=0)  # shape [10, 6]
+        tokens_tensor = torch.from_numpy(tokens_np).unsqueeze(0).to(self.DEVICE)  # [1, 10, 6]
+        logger.info("tokens_tensor: "+str(tokens_tensor))
+
+        self.transformer_model.eval()
+        with torch.no_grad():
+
+            final_out, encoder_out = self.transformer_model(tokens_tensor, ...)
+            logger.info("encoder_out: "+str(encoder_out))
+            # shape: [1, 10, 64]
+
+            # You can pick how to compress 10 steps into 1 vector:
+            # e.g. average pooling across time
+            # [1, 32]
+            embedding_tensor = encoder_out.mean(dim=1)
+            logger.info("embedding_tensor: "+str(embedding_tensor))
+
+            # move to CPU and NumPy
+            emb_cpu = embedding_tensor.squeeze(0).cpu().numpy()  # shape [32]
+            self.current_transformer_embedding = emb_cpu.astype(np.float32)
 
 
     def get_state(self, evaluation=False):
@@ -217,11 +312,14 @@ class TCP_Env_Wrapper(object):
         reward=0
         state=np.zeros(1)
         w=s0
+        # logger.info("s0: "+str(s0))
+        # logger.info("s0 length: "+str(len(s0)))
         if len(s0) == (self.params.dict['input_dim']):
             d=s0[0]
             thr=s0[1]
             samples=s0[2]
             delta_t=s0[3]
+            logger.info("delta_t: "+str(delta_t))
             target_=s0[4]
             cwnd=s0[5]
             pacing_rate=s0[6]
@@ -310,6 +408,48 @@ class TCP_Env_Wrapper(object):
             state=np.append(state,[delta_t_n])
             state=np.append(state,[min_rtt_min/srtt_ms_min])
             state=np.append(state,[delay_metric])
+            # -------------------------------------------------------
+            # 1) We read s0 from shared memory
+            # 2) Once we parse s0, we add to raw_feature_buffer and maybe create a new token
+            #    if we've reached base_rtt)
+            raw_6_features = s0[-6:]
+            self.raw_feature_buffer.append((raw_6_features, delta_t))
+            self.accumulated_time += delta_t
+            
+            new_token_created = False
+            if not self.base_rtt:
+                self.base_rtt = raw_6_features[0]*2  # set the base_rtt once
+
+            logger.info("accumulated_time: "+str(self.accumulated_time))
+            logger.info("base_rtt: "+str(self.base_rtt))
+            if self.accumulated_time >= self.base_rtt > 0:
+                # We have enough data for 1 token
+                token = self.compute_token()
+                logger.info("New token: "+str(token))
+                self.token_window.append(token)
+                if len(self.token_window) > self.max_token_window_size:
+                    self.token_window.pop(0)
+                # we made a new token, so set flag
+                new_token_created = True
+
+                # reset accumulation
+                self.raw_feature_buffer.clear()
+                self.accumulated_time = 0.0
+
+            # 3) Only if a new token was created AND we have the full 10 tokens
+            #    do we run the transformer to get a new embedding.
+            if new_token_created and len(self.token_window) == self.max_token_window_size:
+                self.update_transformer_embedding()
+
+            # -------------------------------------------------------
+            # Then finally, we append `transformer_embedding` to the state.
+
+            # state is currently something like shape (N,).
+            # We'll do:
+            # state = np.concatenate([state, self.current_transformer_embedding], axis=0)
+
+            logger.info("aggreated time: "+str(self.accumulated_time))
+            logger.info(f"transformer_embedding: {self.current_transformer_embedding}")
 
             self.prev_rid = rid
             return state, d, reward, True

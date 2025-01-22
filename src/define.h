@@ -284,11 +284,12 @@ struct sInfo
     sTrace *trace;
     int sock;
     int num_lines;
+    // int delay_ms;
 };
 int delay_ms;
-double min_base_rtt = 0.1;
-double max_base_rtt = 1.6;
-double base_rtt;
+// double min_base_rtt = 0.1;
+// double max_base_rtt = 1.6;
+// double base_rtt;
 int client_port;
 sTrace *trace;
 

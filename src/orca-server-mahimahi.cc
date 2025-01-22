@@ -64,7 +64,7 @@ int main(int argc, char **argv)
     downlink=argv[7];
     uplink=argv[8];
     delay_ms=atoi(argv[9]);
-    base_rtt = (delay_ms*2/100 - min_base_rtt)/(max_base_rtt - min_base_rtt);
+    // base_rtt = (delay_ms*2/100 - min_base_rtt)/(max_base_rtt - min_base_rtt);
     log_file=argv[10];
     duration=atoi(argv[11]);
     qsize=atoi(argv[12]);
@@ -364,6 +364,8 @@ void* CntThread(void* information)
         DBGPRINT(0,0,"Cannot get priority for the Data thread: %s\n",strerror(errno));
     }
     */
+    // FILE *log_fp = fopen("rl_logging/sage_info.txt", "w");
+    // fprintf(log_fp, "delay_ms: %d\n", delay_ms);
 	int ret1, ret2;
     double min_rtt_=0.0;
     double pacing_rate=0.0;
@@ -407,7 +409,7 @@ void* CntThread(void* information)
     //Time to start the Logic
     struct tcp_orca_info tcp_info_pre;
     // struct tcp_sage_info sage_info_pre;
-    FILE *log_fp = fopen("rl_logging/sage_info.txt", "w");
+    
     tcp_info_pre.init();
     int get_info_error_counter=0;
     int actor_is_dead_counter=0;
@@ -437,7 +439,7 @@ void* CntThread(void* information)
                 if(orca_info.avg_urtt>0)
                 {
                     t1=timestamp();
-                    fprintf(log_fp, "t1 %d\n", t1);
+                    // fprintf(log_fp, "t1 %d\n", t1);
                     
                     double time_delta=(double)(t1-t0)/1000000.0;
                     double delay=(double)orca_info.avg_urtt/1000.0;
@@ -477,14 +479,14 @@ void* CntThread(void* information)
                             cwnd_rate = 0;
                         }
                         pre_cwnd = sage_info.snd_cwnd;
-                        fprintf(log_fp, "dt_pre %d\n", t2);
-                        fprintf(log_fp, "base_rtt: %f\n", base_rtt);
-                        fprintf(log_fp, "sage_info.rtt: %f\n", sage_info.rtt/100000.0);
-                        fprintf(log_fp, "sage_info.rttvar: %f\n", sage_info.rttvar/1000.0);
-                        fprintf(log_fp, "sage_info.delivery_rate: %f\n", sage_info.delivery_rate/125000.0/BW_NORM_FACTOR);
-                        // fprintf(log_fp, "loss_db.sum(): %d, dt_sum: %d\n", loss_db.sum(), dt_sum);
-                        fprintf(log_fp, "l_w_mbps: %f\n", l_w_mbps/BW_NORM_FACTOR);
-                        fprintf(log_fp, "cwnd_rate: %f\n", cwnd_rate);
+                        // fprintf(log_fp, "dt_pre %d\n", t2);
+                        // fprintf(log_fp, "delay_ms: %d\n", delay_ms);
+                        // fprintf(log_fp, "sage_info.rtt: %f\n", sage_info.rtt/100000.0);
+                        // fprintf(log_fp, "sage_info.rttvar: %f\n", sage_info.rttvar/1000.0);
+                        // fprintf(log_fp, "sage_info.delivery_rate: %f\n", sage_info.delivery_rate/125000.0/BW_NORM_FACTOR);
+                        // // fprintf(log_fp, "loss_db.sum(): %d, dt_sum: %d\n", loss_db.sum(), dt_sum);
+                        // fprintf(log_fp, "l_w_mbps: %f\n", l_w_mbps/BW_NORM_FACTOR);
+                        // fprintf(log_fp, "cwnd_rate: %f\n", cwnd_rate);
                     }
 
                     report_period=20;
@@ -507,10 +509,10 @@ void* CntThread(void* information)
                         }
                         continue;
                     }
-                    sprintf(message,"%d %.7f %.7f %.7f %.7f %.7f %.7f %.7f %.7f %.7f %.7f %.7f %.7f %.7f %.7f %.7f",
+                    sprintf(message,"%d %.7f %.7f %.7f %.7f %.7f %.7f %.7f %.7f %.7f %.7f %.7f %.7f %.7f %.7f %.7f %d %.7f %.7f %.7f %.7f %.7f",
                             msg_id,delay,(double)orca_info.thr,(double)orca_info.cnt,(double)time_delta,
                             (double)target,(double)orca_info.cwnd, pacing_rate,lost_rate,srtt_ms,snd_ssthresh,packets_out
-                            ,retrans_out,max_packets_out,(double)orca_info.mss,min_rtt_);
+                            ,retrans_out,max_packets_out,(double)orca_info.mss,min_rtt_, delay_ms, (double)sage_info.rtt/100000.0, (double)sage_info.rttvar/1000.0, (double)sage_info.delivery_rate/125000.0/BW_NORM_FACTOR, l_w_mbps/BW_NORM_FACTOR, cwnd_rate);
                     memcpy(shared_memory,message,sizeof(message));
                     if ((duration_steps!=0))
                     {
@@ -614,7 +616,7 @@ void* CntThread(void* information)
     shmctl(shmid, IPC_RMID, NULL);
     shmdt(shared_memory_rl);
     shmctl(shmid_rl, IPC_RMID, NULL);
-    fclose(log_fp);
+    // fclose(log_fp);
     return((void *)0);
 }
 void* DataThread(void* info)
