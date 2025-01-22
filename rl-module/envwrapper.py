@@ -327,8 +327,8 @@ class TCP_Env_Wrapper(object):
         reward=0
         state=np.zeros(1)
         w=s0
-        logger.info("s0: "+str(s0))
-        logger.info("s0 length: "+str(len(s0)))
+        # logger.info("s0: "+str(s0))
+        # logger.info("s0 length: "+str(len(s0)))
         if len(s0) == (self.params.dict['input_dim']):
             d=s0[0]
             thr=s0[1]
@@ -435,7 +435,7 @@ class TCP_Env_Wrapper(object):
             if not self.base_rtt:
                 self.base_rtt = raw_6_features[0]*2/100  # set the base_rtt once in 100x ms
 
-            logger.info("accumulated_time: "+str(self.accumulated_time))
+            # logger.info("accumulated_time: "+str(self.accumulated_time))
             # logger.info("base_rtt: "+str(self.base_rtt))
             if self.accumulated_time >= self.base_rtt > 0:
                 # We have enough data for 1 token
@@ -462,7 +462,7 @@ class TCP_Env_Wrapper(object):
             # state is currently something like shape (N,).
             # We'll do:
 
-            logger.info(f"transformer_embedding: {self.current_transformer_embedding}")
+            # logger.info(f"transformer_embedding: {self.current_transformer_embedding}")
             state = np.concatenate([state, self.current_transformer_embedding], axis=0)
 
             self.prev_rid = rid
