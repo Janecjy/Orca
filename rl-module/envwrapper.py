@@ -141,7 +141,7 @@ class TCP_Env_Wrapper(object):
 
             # A reference to your trained Transformer model
             self.DEVICE = 'cpu'
-            self.transformer_model = torch.load('models/RTT-Checkpoint-BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-809iter.p', map_location=self.DEVICE)
+            self.transformer_model = torch.load('models/Time-Checkpoint-BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-809iter.p', map_location=self.DEVICE)
             self.bucket_boundaries_ccbench = {
                 1: [0.12, 0.2, 0.28, 0.43, 0.55, 0.83, 1.03, 1.63, 2.12, 4.02, 8, 12],
                 2: [0.01, 0.3, 0.38, 0.44, 0.49, 0.54, 0.6, 0.68, 0.84, 1.41, 3, 5],
@@ -437,19 +437,18 @@ class TCP_Env_Wrapper(object):
 
             # logger.info("accumulated_time: "+str(self.accumulated_time))
             # logger.info("base_rtt: "+str(self.base_rtt))
-            if self.accumulated_time >= self.base_rtt > 0:
-                # We have enough data for 1 token
-                token = self.compute_token()
-                # logger.info("New token: "+str(token))
-                self.token_window.append(token)
-                if len(self.token_window) > self.max_token_window_size:
-                    self.token_window.pop(0)
-                # we made a new token, so set flag
-                new_token_created = True
+            # We have enough data for 1 token
+            token = self.compute_token()
+            # logger.info("New token: "+str(token))
+            self.token_window.append(token)
+            if len(self.token_window) > self.max_token_window_size:
+                self.token_window.pop(0)
+            # we made a new token, so set flag
+            new_token_created = True
 
-                # reset accumulation
-                self.raw_feature_buffer.clear()
-                self.accumulated_time = 0.0
+            # reset accumulation
+            self.raw_feature_buffer.clear()
+            self.accumulated_time = 0.0
 
             # 3) Only if a new token was created AND we have the full 10 tokens
             #    do we run the transformer to get a new embedding.

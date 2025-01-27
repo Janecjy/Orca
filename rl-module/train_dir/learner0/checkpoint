@@ -1,2 +1,6 @@
-model_checkpoint_path: "model.ckpt-1283529"
-all_model_checkpoint_paths: "model.ckpt-1283529"
+model_checkpoint_path: "/users/raghavvr/Orca/rl-module/train_dir/learner0/model.ckpt-15935527"
+all_model_checkpoint_paths: "/users/raghavvr/Orca/rl-module/train_dir/learner0/model.ckpt-15929954"
+all_model_checkpoint_paths: "/users/raghavvr/Orca/rl-module/train_dir/learner0/model.ckpt-15931353"
+all_model_checkpoint_paths: "/users/raghavvr/Orca/rl-module/train_dir/learner0/model.ckpt-15932754"
+all_model_checkpoint_paths: "/users/raghavvr/Orca/rl-module/train_dir/learner0/model.ckpt-15934144"
+all_model_checkpoint_paths: "/users/raghavvr/Orca/rl-module/train_dir/learner0/model.ckpt-15935527"
