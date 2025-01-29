@@ -33,6 +33,8 @@ import sys
 from time import sleep
 from models import create_mask
 
+import multiprocessing
+
 class Env_Wrapper(object):
     def __init__(self, name):
 
@@ -102,6 +104,107 @@ class GYM_Env_Wrapper(Env_Wrapper):
         return s1, r, done, True
 
 
+def compute_token(raw_feature_buffer, rtt_min, rtt_max, bucket_boundaries_ccbench):
+    """
+    raw_feature_buffer: list of [(f6, dt), ...] 
+                        where f6 is np.array of shape (6,) 
+                        and dt is float
+    Returns: a single token of shape (6,)
+    """
+    # Sum up (feature * dt) for each entry
+    total_time = 0.0
+    weighted_sum = np.zeros(6, dtype=np.float64)
+    # logger.info(f"raw_feature_buffer: {self.raw_feature_buffer}")
+    for (f6, dt) in raw_feature_buffer:
+        weighted_sum += f6 * dt
+        total_time += dt
+
+    if total_time < 1e-9:
+        # Avoid div-by-zero; fallback to the last sample or zeros
+        avg_features = raw_feature_buffer[-1][0]
+    else:
+        avg_features = weighted_sum / total_time
+
+    # logger.info(f"avg_features: {avg_features}")
+
+    # avg_features[0] is base_rtt. We min-max normalize it:
+    base_rtt_val = avg_features[0]*2/100
+    if np.isclose(rtt_min, rtt_max):
+        normalized_rtt = 0.0
+    else:
+        normalized_rtt = (base_rtt_val - rtt_min) / (rtt_max - rtt_min)
+
+    # For features 1..5, do bucketization
+    # feature 1 = avg_features[1], feature 2 = avg_features[2], ...
+    # boundaries are in your self.bucket_boundaries_ccbench dictionary
+    token = [normalized_rtt]  # first slot is normalized base_rtt
+    for feat_idx in range(1, 6):
+        boundaries = bucket_boundaries_ccbench[feat_idx]
+        val = avg_features[feat_idx]
+        # local bin index
+        bin_local = np.searchsorted(boundaries, val, side='right')
+        # We often want to offset these bins in a big vocabulary,
+        # but for a single token we can just store bin_local directly
+        token.append(bin_local)
+
+    return np.array(token, dtype=np.float32)
+
+def update_transformer_embedding(DEVICE, transformer_model, token_window):
+    # Convert self.token_window -> shape (1, 10, 6)
+    tokens_np = np.stack(token_window, axis=0)  # shape [10, 6]
+    tokens_tensor = torch.from_numpy(tokens_np).unsqueeze(0).to(DEVICE)  # [1, 10, 6]
+    # logger.info("tokens_tensor: "+str(tokens_tensor))
+
+    transformer_model.eval()
+    with torch.no_grad():
+        # Example forward pass. Because we have a Seq2Seq, we need a dummy trg.
+        # We'll do something minimal. Real usage might differ.
+
+        enc_input = tokens_tensor[:, :, :].to(DEVICE)
+        dec_input = (1.5 * torch.ones((tokens_tensor.shape[0], 10, tokens_tensor.shape[2]))).to(DEVICE)
+        src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=2, device=DEVICE)
+        
+        # We pass None for padding masks:
+        out_probs, encoder_out = transformer_model(
+            enc_input, dec_input, 
+            src_mask=src_mask, 
+            tgt_mask=tgt_mask,
+            src_padding_mask=None, 
+            tgt_padding_mask=None, 
+            memory_key_padding_mask=None
+        )
+
+        # logger.info("encoder_out: "+str(encoder_out))
+        # shape: [1, 10, 64]
+
+        # You can pick how to compress 10 steps into 1 vector:
+        # e.g. average pooling across time
+        # [1, 32]
+        embedding_tensor = encoder_out.mean(dim=1)
+        # logger.info("embedding_tensor: "+str(embedding_tensor))
+
+        # move to CPU and NumPy
+        emb_cpu = embedding_tensor.squeeze(0).cpu().numpy()  # shape [32]
+        return emb_cpu.astype(np.float32)
+
+def token_work(token_input_queue, token_output_queue):
+    while True:
+        request = token_input_queue.get()
+
+        raw_feature_buffer, rtt_min, rtt_max, bucket_boundaries_ccbench = request
+
+        reply = compute_token(raw_feature_buffer, rtt_min, rtt_max, bucket_boundaries_ccbench)
+        token_output_queue.put(reply)
+
+def transformer_work(transformer_input_queue, transformer_output_queue, device, model):
+    while True:
+        request = transformer_input_queue.get()
+
+        token_window = request
+
+        reply = update_transformer_embedding(device, model, token_window)
+        transformer_output_queue.put(reply)
+
 class TCP_Env_Wrapper(object):
     def __init__(self,name, params, config=None, for_init_only=True, shrmem_r=None, shrmem_w=None,use_normalizer=True):
 
@@ -150,6 +253,16 @@ class TCP_Env_Wrapper(object):
                 5: [0.75, 1, 1.001, 1.003, 1.012, 1.25]
             }
 
+            self.token_input_queue = multiprocessing.Queue()
+            self.token_output_queue = multiprocessing.Queue()
+            self.token_worker = multiprocessing.Process(target=token_work, args=(self.token_input_queue, self.token_output_queue))
+            self.transformer_input_queue = multiprocessing.Queue()
+            self.transformer_output_queue = multiprocessing.Queue()
+            self.transformer_worker = multiprocessing.Process(target=transformer_work, args=(self.transformer_input_queue, self.transformer_output_queue, self.DEVICE, self.transformer_model))
+
+            self.token_worker.start()
+            self.transformer_worker.start()
+
             self.use_normalizer=use_normalizer
             if self.use_normalizer==True:
                 self.normalizer=Normalizer(params, config)
@@ -188,88 +301,6 @@ class TCP_Env_Wrapper(object):
     def test(self):
         print("Hello")
 
-    def compute_token(self):
-        """
-        raw_feature_buffer: list of [(f6, dt), ...] 
-                            where f6 is np.array of shape (6,) 
-                            and dt is float
-        Returns: a single token of shape (6,)
-        """
-        # Sum up (feature * dt) for each entry
-        total_time = 0.0
-        weighted_sum = np.zeros(6, dtype=np.float64)
-        # logger.info(f"raw_feature_buffer: {self.raw_feature_buffer}")
-        for (f6, dt) in self.raw_feature_buffer:
-            weighted_sum += f6 * dt
-            total_time += dt
-
-        if total_time < 1e-9:
-            # Avoid div-by-zero; fallback to the last sample or zeros
-            avg_features = self.raw_feature_buffer[-1][0]
-        else:
-            avg_features = weighted_sum / total_time
-
-        # logger.info(f"avg_features: {avg_features}")
-
-        # avg_features[0] is base_rtt. We min-max normalize it:
-        base_rtt_val = avg_features[0]*2/100
-        if np.isclose(self.rtt_min, self.rtt_max):
-            normalized_rtt = 0.0
-        else:
-            normalized_rtt = (base_rtt_val - self.rtt_min) / (self.rtt_max - self.rtt_min)
-        
-        # For features 1..5, do bucketization
-        # feature 1 = avg_features[1], feature 2 = avg_features[2], ...
-        # boundaries are in your self.bucket_boundaries_ccbench dictionary
-        token = [normalized_rtt]  # first slot is normalized base_rtt
-        for feat_idx in range(1, 6):
-            boundaries = self.bucket_boundaries_ccbench[feat_idx]
-            val = avg_features[feat_idx]
-            # local bin index
-            bin_local = np.searchsorted(boundaries, val, side='right')
-            # We often want to offset these bins in a big vocabulary,
-            # but for a single token we can just store bin_local directly
-            token.append(bin_local)
-        
-        return np.array(token, dtype=np.float32)
-
-    def update_transformer_embedding(self):
-        # Convert self.token_window -> shape (1, 10, 6)
-        tokens_np = np.stack(self.token_window, axis=0)  # shape [10, 6]
-        tokens_tensor = torch.from_numpy(tokens_np).unsqueeze(0).to(self.DEVICE)  # [1, 10, 6]
-        # logger.info("tokens_tensor: "+str(tokens_tensor))
-
-        self.transformer_model.eval()
-        with torch.no_grad():
-            # Example forward pass. Because we have a Seq2Seq, we need a dummy trg.
-            # We'll do something minimal. Real usage might differ.
-
-            enc_input = tokens_tensor[:, :, :].to(self.DEVICE)
-            dec_input = (1.5 * torch.ones((tokens_tensor.shape[0], 10, tokens_tensor.shape[2]))).to(self.DEVICE)
-            src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=2, device=self.DEVICE)
-            
-            # We pass None for padding masks:
-            out_probs, encoder_out = self.transformer_model(
-                enc_input, dec_input, 
-                src_mask=src_mask, 
-                tgt_mask=tgt_mask,
-                src_padding_mask=None, 
-                tgt_padding_mask=None, 
-                memory_key_padding_mask=None
-            )
-
-            # logger.info("encoder_out: "+str(encoder_out))
-            # shape: [1, 10, 64]
-
-            # You can pick how to compress 10 steps into 1 vector:
-            # e.g. average pooling across time
-            # [1, 32]
-            embedding_tensor = encoder_out.mean(dim=1)
-            # logger.info("embedding_tensor: "+str(embedding_tensor))
-
-            # move to CPU and NumPy
-            emb_cpu = embedding_tensor.squeeze(0).cpu().numpy()  # shape [32]
-            self.current_transformer_embedding = emb_cpu.astype(np.float32)
 
 
     def get_state(self, evaluation=False):
@@ -439,22 +470,33 @@ class TCP_Env_Wrapper(object):
             # logger.info("base_rtt: "+str(self.base_rtt))
             if self.accumulated_time >= self.base_rtt > 0:
                 # We have enough data for 1 token
-                token = self.compute_token()
-                # logger.info("New token: "+str(token))
-                self.token_window.append(token)
-                if len(self.token_window) > self.max_token_window_size:
-                    self.token_window.pop(0)
-                # we made a new token, so set flag
-                new_token_created = True
+                # push the data to the worker
+                self.token_input_queue.put_nowait((self.raw_feature_buffer, self.rtt_min, self.rtt_max, self.bucket_boundaries_ccbench))
 
-                # reset accumulation
-                self.raw_feature_buffer.clear()
-                self.accumulated_time = 0.0
+                # since we are single consumer we can safely pull values
+                while not self.token_output_queue.empty():
+                    # do not block, cause an error if there's nothing
+                    token = self.token_output_queue.get_nowait()
+
+                    # logger.info("New token: "+str(token))
+                    self.token_window.append(token)
+                    if len(self.token_window) > self.max_token_window_size:
+                        self.token_window.pop(0)
+                    # we made a new token, so set flag
+                    new_token_created = True
+
+                    # reset accumulation
+                    self.raw_feature_buffer.clear()
+                    self.accumulated_time = 0.0
 
             # 3) Only if a new token was created AND we have the full 10 tokens
             #    do we run the transformer to get a new embedding.
             if new_token_created and len(self.token_window) == self.max_token_window_size:
-                self.update_transformer_embedding()
+                # push the data to the worker
+                self.transformer_input_queue.put_nowait(self.token_window)
+
+                while not self.transformer_output_queue.empty():
+                    self.current_transformer_embedding = self.transformer_output_queue.get_nowait()
 
             # -------------------------------------------------------
             # Then finally, we append `transformer_embedding` to the state.
