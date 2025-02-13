@@ -80,19 +80,19 @@ class Seq2SeqWithEmbeddingmodClass(nn.Module):
         # 1) embed
         src = src.float()
         src = self.relu(self.embed_layer2(self.relu(self.embed_layer1(src))))
-        trg = self.relu(self.embed_layer2(self.relu(self.embed_layer1(trg))))
+        # trg = self.relu(self.embed_layer2(self.relu(self.embed_layer1(trg))))
 
         # 2) (batch, seq, emb) -> (seq, batch, emb)
         src = src.permute(1, 0, 2)
-        trg = trg.permute(1, 0, 2)
+        # trg = trg.permute(1, 0, 2)
 
         # 3) positional encoding
         src_pos = self.positional_encoding(src)  # shape [seq, batch, emb]
-        tgt_pos = self.positional_encoding(trg)
+        # tgt_pos = self.positional_encoding(trg)
 
         # 4) revert to (batch, seq, emb)
         src_pos = src_pos.permute(1, 0, 2)  # [batch, seq, emb]
-        tgt_pos = tgt_pos.permute(1, 0, 2)
+        # tgt_pos = tgt_pos.permute(1, 0, 2)
 
         # 5) run the transformer
         # 5a) switch shape back to [seq, batch, emb] for the encoder call
@@ -107,18 +107,19 @@ class Seq2SeqWithEmbeddingmodClass(nn.Module):
         # decode expects the memory as [seq, batch, emb] if batch_first=False 
         # so do the same for tgt_pos
         # tgt_pos = tgt_pos.permute(1, 0, 2)  # => [seq, batch, emb]
-        decoder_out = self.transformer.decoder(
-            tgt_pos,
-            memory,
-            tgt_mask=tgt_mask,
-            memory_key_padding_mask=memory_key_padding_mask,
-            tgt_key_padding_mask=tgt_padding_mask
-        )  # => [seq, batch, emb]
+        # decoder_out = self.transformer.decoder(
+        #     tgt_pos,
+        #     memory,
+        #     tgt_mask=tgt_mask,
+        #     memory_key_padding_mask=memory_key_padding_mask,
+        #     tgt_key_padding_mask=tgt_padding_mask
+        # )  # => [seq, batch, emb]
 
         # 6) final projection
-        decoder_out = decoder_out.permute(1, 0, 2)  # => [batch, seq, emb]
-        logits = self.relu(self.de_embed_layer2(self.relu(self.de_embed_layer1(decoder_out))))
-        probs = self.softmax(logits)
+        # decoder_out = decoder_out.permute(1, 0, 2)  # => [batch, seq, emb]
+        # logits = self.relu(self.de_embed_layer2(self.relu(self.de_embed_layer1(decoder_out))))
+        # probs = self.softmax(logits)
 
         # now we can return both
-        return probs, memory
+        # return probs, memory
+        return memory
