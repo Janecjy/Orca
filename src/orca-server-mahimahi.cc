@@ -526,11 +526,13 @@ void* CntThread(void* information)
                     got_no_zero=1;
                     tcp_info_pre=orca_info;
                     t0=timestamp();
+                    DBGMARK(0,0,"get_info_error_counter new info get reset:%d",get_info_error_counter);
                     get_info_error_counter=0;
                 }
                 else
                 {
                     get_info_error_counter++;
+                    DBGMARK(0,0,"get_info_error_counter:%d",get_info_error_counter);
                     if(get_info_error_counter>30000)
                     {
                         DBGMARK(0,0,"No valid state for 1 min. We (server of Actor %d) are going down down down ...\n",actor_id);
@@ -542,6 +544,7 @@ void* CntThread(void* information)
         got_alpha=false;
         int error_cnt=0;
         int error2_cnt=0;
+        DBGMARK(0,0,"error2_cnt initialized:%d",error2_cnt);
         while(!got_alpha && send_traffic)
         { 
            //Get alpha from RL-Module
@@ -575,9 +578,11 @@ void* CntThread(void* information)
                        error_cnt=0;
                    }
                    error_cnt++;
+                   DBGMARK(0,0,"error_cnt:%d",error_cnt);
                    usleep(1000);
                }
                error2_cnt=0;
+               DBGMARK(0,0,"error_cnt reset after received:%d",error_cnt);
            }
            else{
                 if (error2_cnt==50)
@@ -588,6 +593,7 @@ void* CntThread(void* information)
                     if((1+tmp_step)==(step_it))
                     {
                         actor_is_dead_counter++;
+                        DBGMARK(0,0,"actor_is_dead_counter:%d",actor_is_dead_counter);
                         tmp_step=step_it;
                         if(actor_is_dead_counter>120)
                         {
@@ -597,13 +603,16 @@ void* CntThread(void* information)
                     }
                     else
                     {
+                        DBGMARK(0,0,"actor_is_dead_counter reset:%d",actor_is_dead_counter);
                         actor_is_dead_counter=0;
                         tmp_step=step_it;
                     }
                     got_alpha=true; 
+                    DBGMARK(0,0,"error_cnt reset reaching 50:%d",error_cnt);
                     error2_cnt=0;
                 }
                 else{ 
+                    DBGMARK(0,0,"error2_cnt:%d",error2_cnt);
                     error2_cnt++;
                     usleep(10000);
                 }
@@ -723,10 +732,10 @@ void* DataThread(void* info)
 		len=strlen(write_message);
 		while(len>0)
 		{
-			DBGMARK(DBGSERVER,5,"++++++\n");
+			// DBGMARK(DBGSERVER,5,"++++++\n");
 			len-=send(sock_local,write_message,strlen(write_message),0);
 		    usleep(50);         
-            DBGMARK(DBGSERVER,5,"------\n");
+            // DBGMARK(DBGSERVER,5,"------\n");
 		}
         usleep(100);
 	}

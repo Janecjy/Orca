@@ -32,6 +32,8 @@
 //=========================================================================
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
+#include <time.h>
 //#include "Debug.h"
 //#include "MemTrack.h"
 //=========================================================================
@@ -158,9 +160,9 @@ enum ERes
 #define PRINTXY(_x,_y, fmt, arg...)  do{CConsole::Print("[%d;%dH",_y,_x); CConsole::Print(fmt, ## arg );}while(0)
 #define PRINTCOL(col, fmt, arg...) CConsole::Print( col fmt COL_DWHT, ## arg )
 #define DBGPRINTPRTY(curlvl, showlvl, fmt, arg...)	do{if(curlvl>=showlvl)CConsole::Print(COL_LWHT "\r[%s] " COL_DWHT fmt COL_DWHT, __PRETTY_FUNCTION__ , ## arg );}while(0)
-#define DBGPRINT(curlvl, showlvl, fmt, arg...)  do{if(curlvl>=showlvl)CConsole::Print(COL_LWHT "\r[%s] " COL_DWHT fmt COL_DWHT, __FUNCTION__ , ## arg );}while(0)
-#define DBGMARK(curlvl, showlvl, fmt, arg...)	do{if(curlvl>=showlvl)CConsole::Print(COL_LBLU "\r[%s-%s-%d] " COL_DBLU fmt COL_DWHT, __FILE_NAME__, __FUNCTION__, __LINE__ , ## arg );}while(0)
-#define DBGERROR(fmt, arg...)		CConsole::Print(COL_LRED "\r[%s] " COL_DRED fmt COL_DWHT, __FUNCTION__ , ## arg )
+// #define DBGPRINT(curlvl, showlvl, fmt, arg...)  do{if(curlvl>=showlvl)CConsole::Print(COL_LWHT "\r[%s] " COL_DWHT fmt COL_DWHT, __FUNCTION__ , ## arg );}while(0)
+// #define DBGMARK(curlvl, showlvl, fmt, arg...)	do{if(curlvl>=showlvl)CConsole::Print(COL_LBLU "\r[%s-%s-%d] " COL_DBLU fmt COL_DWHT, __FILE_NAME__, __FUNCTION__, __LINE__ , ## arg );}while(0)
+// #define DBGERROR(fmt, arg...)		CConsole::Print(COL_LRED "\r[%s] " COL_DRED fmt COL_DWHT, __FUNCTION__ , ## arg )
 #define DBGWARN(fmt, arg...)		CConsole::Print(COL_LYEL "\r[%s] " COL_DYEL fmt COL_DWHT, __FUNCTION__ , ## arg )
 #define DBGINFO(fmt, arg...)		CConsole::Print(COL_LBLU "\r[%s] " COL_DGRN fmt COL_DWHT, __FUNCTION__ , ## arg )
 #else
@@ -169,15 +171,48 @@ enum ERes
 #define PRINTXY(_x,_y,fmt,arg...) do{fprintf(stdout, "[%d;%dH",_y,_x); fprintf(stdout, fmt, ## arg );fflush(stdout);}while(0)
 #define PRINTCOL(col, fmt, arg...) do{fprintf(stdout, col fmt COL_DWHT, ## arg );fflush(stdout);}while(0)
 #define DBGPRINTPRTY(curlvl, showlvl,fmt, arg...)	do{if(curlvl>=showlvl){fprintf(stdout, COL_LWHT "\r[%s] " COL_DWHT fmt COL_DWHT, __PRETTY_FUNCTION__ , ## arg );fflush(stdout);}}while(0)
-#define DBGPRINT(curlvl, showlvl, fmt, arg...)	do{if(curlvl>=showlvl){fprintf(stdout, COL_LWHT "\r[%s] " COL_DWHT fmt COL_DWHT, __FUNCTION__ , ## arg );fflush(stdout);}}while(0)
-#define DBGMARK(curlvl, showlvl, fmt, arg...)	do{if(curlvl>=showlvl){fprintf(stdout, COL_LBLU "\r[%s-%s-%d] " COL_DBLU fmt COL_DWHT, __FILE_NAME__, __FUNCTION__, __LINE__ , ## arg );fflush(stdout);}}while(0)
-#define DBGERROR(fmt, arg...)	do{fprintf(stdout, COL_LRED "\r[%s] " COL_DRED fmt COL_DWHT, __FUNCTION__ , ## arg );fflush(stdout);}while(0)
+// #define DBGPRINT(curlvl, showlvl, fmt, arg...)	do{if(curlvl>=showlvl){fprintf(stdout, COL_LWHT "\r[%s] " COL_DWHT fmt COL_DWHT, __FUNCTION__ , ## arg );fflush(stdout);}}while(0)
+// #define DBGMARK(curlvl, showlvl, fmt, arg...)	do{if(curlvl>=showlvl){fprintf(stdout, COL_LBLU "\r[%s-%s-%d] " COL_DBLU fmt COL_DWHT, __FILE_NAME__, __FUNCTION__, __LINE__ , ## arg );fflush(stdout);}}while(0)
+// #define DBGERROR(fmt, arg...)	do{fprintf(stdout, COL_LRED "\r[%s] " COL_DRED fmt COL_DWHT, __FUNCTION__ , ## arg );fflush(stdout);}while(0)
 #define DBGWARN(fmt, arg...)	do{fprintf(stdout, COL_LYEL "\r[%s] " COL_DYEL fmt COL_DWHT, __FUNCTION__ , ## arg );fflush(stdout);}while(0)
 #define DBGINFO(fmt, arg...)	do{fprintf(stdout, COL_LGRN "\r[%s] " COL_DGRN fmt COL_DWHT, __FUNCTION__ , ## arg );fflush(stdout);}while(0)
 #endif
 //=========================================================================
 #define __FILE_NAME__ (strrchr(__FILE__,'/')?strrchr(__FILE__,'/')+1:__FILE__)
 //=========================================================================
+
+#define LOG_FILE_PATH "/mydata/mahimahi-log"
+
+// Generic logging function
+inline void log_to_file(const char *format, ...) {
+    FILE *log_file = fopen(LOG_FILE_PATH, "a"); // Open in append mode
+    if (!log_file) return;
+
+    // Get current time
+    time_t rawtime;
+    struct tm *timeinfo;
+    char time_str[20];
+    time(&rawtime);
+    timeinfo = localtime(&rawtime);
+    strftime(time_str, 20, "%Y-%m-%d %H:%M:%S", timeinfo);
+
+    // Write timestamp
+    fprintf(log_file, "[%s] ", time_str);
+
+    // Write formatted message
+    va_list args;
+    va_start(args, format);
+    vfprintf(log_file, format, args);
+    va_end(args);
+
+    fprintf(log_file, "\n"); // New line
+    fclose(log_file);
+}
+
+// Update existing macros to use log_to_file
+#define DBGPRINT(level, priority, format, ...) log_to_file(format, ##__VA_ARGS__)
+#define DBGMARK(level, priority, format, ...) log_to_file(format, ##__VA_ARGS__)
+#define DBGERROR(format, ...) log_to_file("ERROR: " format, ##__VA_ARGS__)
 
 //#####################################################################################################
 

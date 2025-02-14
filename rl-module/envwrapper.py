@@ -33,6 +33,43 @@ import sys
 from time import sleep
 from models import create_mask
 
+import logging
+import sys
+
+# Define log file path
+LOG_FILE = "/mydata/env-log"
+
+# Set up logging
+logging.basicConfig(
+    filename=LOG_FILE,
+    filemode="a",  # Append mode
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
+
+# Create logger object
+logger = logging.getLogger()
+
+# Redirect print statements to log file
+class LoggerWriter:
+    def __init__(self, log_func):
+        self.log_func = log_func  # log_func should be logger.info or logger.error
+
+    def write(self, message):
+        if message.strip():  # Avoid logging empty lines
+            self.log_func(message.strip())
+
+    def flush(self):  # Required for compatibility with sys.stdout
+        pass
+
+# Redirect stdout and stderr to log file
+sys.stdout = LoggerWriter(logger.info)
+sys.stderr = LoggerWriter(logger.error)
+
+# Example usage: print("This will be logged in /mydata/env-log")
+print("Logging initialized. All output will be saved to", LOG_FILE)
+
+
 class Env_Wrapper(object):
     def __init__(self, name):
 
@@ -141,7 +178,7 @@ class TCP_Env_Wrapper(object):
 
             # A reference to your trained Transformer model
             self.DEVICE = 'cpu'
-            self.transformer_model = torch.load('models/RTT-Checkpoint-BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-809iter.p', map_location=self.DEVICE)
+            self.transformer_model = torch.load('models/Checkpoint-Combined_10RTT_6col_Transformer3_64_5_5_16_4_lr_1e-05-999iter.p', map_location=self.DEVICE)
             self.bucket_boundaries_ccbench = {
                 1: [0.12, 0.2, 0.28, 0.43, 0.55, 0.83, 1.03, 1.63, 2.12, 4.02, 8, 12],
                 2: [0.01, 0.3, 0.38, 0.44, 0.49, 0.54, 0.6, 0.68, 0.84, 1.41, 3, 5],
@@ -275,6 +312,7 @@ class TCP_Env_Wrapper(object):
     def get_state(self, evaluation=False):
         succeed = False
         error_cnt=0
+        print(f"get_state error_cnt: {error_cnt}")
         while(1):
         # Read value from shared memory
             try:
@@ -314,14 +352,17 @@ class TCP_Env_Wrapper(object):
                     wwwwww=""
 
             error_cnt=error_cnt+1
+            print(f"error_cnt increment: {error_cnt}")
             if error_cnt > 24000:
                 error_cnt=0
+                print(f"error_cnt reaching max reset: {error_cnt}")
                 print("After 3 min, We didn't get any state from the server. Actor "+str(self.config.task)+" is going down down down ...\n")
                 sys.exit(0)
 
             sleep(0.01)
 
         error_cnt=0
+        print(f"error_cnt reset before succeed: {error_cnt}")
         if succeed == False:
             raise ValueError('read Nothing new from shrmem for a long time')
         reward=0
