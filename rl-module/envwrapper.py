@@ -31,6 +31,44 @@ import signal
 import sys
 from time import sleep
 
+
+import logging
+import sys
+
+# Define log file path
+LOG_FILE = "/mydata/env-log"
+
+# Set up logging
+logging.basicConfig(
+    filename=LOG_FILE,
+    filemode="a",  # Append mode
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
+
+# Create logger object
+logger = logging.getLogger()
+
+# Redirect print statements to log file
+class LoggerWriter:
+    def __init__(self, log_func):
+        self.log_func = log_func  # log_func should be logger.info or logger.error
+
+    def write(self, message):
+        if message.strip():  # Avoid logging empty lines
+            self.log_func(message.strip())
+
+    def flush(self):  # Required for compatibility with sys.stdout
+        pass
+
+# Redirect stdout and stderr to log file
+sys.stdout = LoggerWriter(logger.info)
+sys.stderr = LoggerWriter(logger.error)
+
+# Example usage: print("This will be logged in /mydata/env-log")
+print("Logging initialized. All output will be saved to", LOG_FILE)
+
+
 class Env_Wrapper(object):
     def __init__(self, name):
 
@@ -165,6 +203,7 @@ class TCP_Env_Wrapper(object):
     def get_state(self, evaluation=False):
         succeed = False
         error_cnt=0
+        print(f"get_state error_cnt: {error_cnt}")
         while(1):
         # Read value from shared memory
             try:
@@ -202,16 +241,18 @@ class TCP_Env_Wrapper(object):
                     break
                 else:
                     wwwwww=""
-
             error_cnt=error_cnt+1
+            print(f"error_cnt increment: {error_cnt}")
             if error_cnt > 24000:
                 error_cnt=0
+                print(f"error_cnt reaching max reset: {error_cnt}")
                 print("After 3 min, We didn't get any state from the server. Actor "+str(self.config.task)+" is going down down down ...\n")
                 sys.exit(0)
 
             sleep(0.01)
 
         error_cnt=0
+        print(f"error_cnt reset before succeed: {error_cnt}")
         if succeed == False:
             raise ValueError('read Nothing new from shrmem for a long time')
         reward=0

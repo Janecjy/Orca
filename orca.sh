@@ -7,8 +7,8 @@ then
     cur_dir=`pwd -P`
     scheme_="cubic"
     max_steps=500000         #Run untill you collect 50k samples per actor
-    eval_duration=1 #30
-    num_actors=7
+    eval_duration=30000000 #30
+    num_actors=1
     memory_size=$((max_steps*num_actors))
     remote="false"
     dir="${cur_dir}/rl-module"
@@ -80,16 +80,16 @@ then
        #Bring up the actors:
        # Here, we go with single actor
        act_id=0
-       for dl in 6 12 24 48 96 192 300
+       for dl in 6
        do
            downl="wired$dl"
            upl=$downl
-           for del in 5 10 20 40 80
+           for del in 5
            do
                bdp=$((2*dl*del/12))      #12Mbps=1pkt per 1 ms ==> BDP=2*del*BW=2*del*dl/12
-               for qs in $((bdp/2)) $bdp $((2*bdp)) $((4*bdp)) $((8*bdp)) $((16*bdp))
+               for qs in $((2*bdp))
                do
-                   ./actor.sh ${act_port} $epoch ${first_time} $scheme_ $dir $act_id $downl $upl $del 0 $qs $max_steps &
+                   ./actor.sh ${act_port} $epoch ${first_time} $scheme_ $dir $act_id $downl $upl $del 0 $qs $max_steps
                    pids="$pids $!"
                    act_id=$((act_id+1))
                    act_port=$((port_base+act_id))
