@@ -249,7 +249,7 @@ class TCP_Env_Wrapper(object):
             src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=2, device=self.DEVICE)
             
             # We pass None for padding masks:
-            out_probs, encoder_out = self.transformer_model(
+            encoder_out = self.transformer_model(
                 enc_input, dec_input, 
                 src_mask=src_mask, 
                 tgt_mask=tgt_mask,
