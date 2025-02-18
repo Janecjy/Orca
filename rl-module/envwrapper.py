@@ -162,6 +162,35 @@ class TCP_Env_Wrapper(object):
             signal.signal(signal.SIGTERM, self.handler_term)
             if self.config.load is not None and self.use_normalizer==True:
                 _ = self.normalizer.load_stats()
+            
+            self.state_config_file = os.path.join(os.getcwd(), "rl-module", "state_config.txt")
+            self.dl_val, self.del_val, self.qs_val = self.load_experiment_params()
+            print(f"Loaded parameters: dl={self.dl_val}, del={self.del_val}, qs={self.qs_val}")
+
+            state_collection_dir = os.path.join(os.getcwd(), "rl-module", "state_collection")
+            os.makedirs(state_collection_dir, exist_ok=True)
+            self.state_collection_file_name = os.path.join(state_collection_dir, f"states_{self.dl_val}_{self.del_val}_{self.qs_val}.txt")
+            print(f"State collection file: {self.state_collection_file_name}")
+
+            with open(self.state_collection_file_name, 'w') as f:
+                pass
+
+            self.state_collection_counter = 0
+
+    def load_experiment_params(self):
+        """ Reads dl_val, del_val, and qs_val from state_config.txt """
+        params = {"dl_val": None, "del_val": None, "qs_val": None}
+
+        if os.path.exists(self.state_config_file):
+            with open(self.state_config_file, 'r') as f:
+                for line in f:
+                    key, value = line.strip().split('=')
+                    params[key] = value
+        
+        if None in params.values():
+            raise ValueError("Missing parameters in state_config.txt")
+
+        return params["dl_val"], params["del_val"], params["qs_val"]
 
     def handler_term(self, signum, frame):
         print("python program terminated usking Kill -15")
@@ -463,7 +492,16 @@ class TCP_Env_Wrapper(object):
             # We'll do:
 
             # logger.info(f"transformer_embedding: {self.current_transformer_embedding}")
+            with open(self.state_collection_file_name, 'a') as f:
+                f.write(str(self.current_transformer_embedding) + '\n')
+
             state = np.concatenate([state, self.current_transformer_embedding], axis=0)
+
+            self.state_collection_counter += 1
+            if self.state_collection_counter % 100 == 0:
+                print(f"Collected {self.state_collection_counter} states.")
+            while self.state_collection_counter > 5000:
+                print(f"Reached max counter of {self.state_collection_counter} states. Kill the process")
 
             self.prev_rid = rid
             return state, d, reward, True

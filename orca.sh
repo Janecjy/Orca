@@ -19,6 +19,12 @@ then
     epoch=20
     act_port=$port_base
 
+    dl_val=48
+    del_val=10
+    bdp_val=$((2*dl_val*del_val/12))
+    qs_val=$((2*bdp_val))
+    config_file="${dir}/state_config.txt"
+
     if [ $1 -eq 4 ]
     then
        # If you are here: You are going to perform an evaluation over an emulated link
@@ -29,15 +35,20 @@ then
        ./learner.sh  $dir ${first_time} &
        #Bring up the actors:
        act_id=0
-       for dl in 48
+       for dl in $dl_val
        do
            downl="wired$dl"
            upl="wired48"
-           for del in 10
+           for del in $del_val
            do
                bdp=$((2*dl*del/12))     #12Mbps=1pkt per 1 ms ==> BDP=2*del*BW=2*del*dl/12
-               for qs in $((2*bdp))
+               for qs in $qs_val
                do
+                    echo "dl_val=$dl" > "$config_file"
+                    echo "del_val=$del" >> "$config_file"
+                    echo "qs_val=$qs" >> "$config_file"
+                    echo "Saved parameters to $config_file"
+
                    ./actor.sh ${act_port} $epoch ${first_time} $scheme_ $dir $act_id $downl $upl $del $eval_duration $qs 0 &
                    pids="$pids $!"
                    act_id=$((act_id+1))
@@ -78,15 +89,20 @@ then
        #Bring up the actors:
        # Here, we go with single actor
        act_id=0
-       for dl in 48
+       for dl in $dl_val
        do
            downl="wired$dl"
            upl=$downl
-           for del in 10
+           for del in $del_val
            do
                bdp=$((2*dl*del/12))      #12Mbps=1pkt per 1 ms ==> BDP=2*del*BW=2*del*dl/12
-               for qs in $((2*bdp))
+               for qs in $qs_val
                do
+                    echo "dl_val=$dl" > "$config_file"
+                    echo "del_val=$del" >> "$config_file"
+                    echo "qs_val=$qs" >> "$config_file"
+                    echo "Saved parameters to $config_file"
+
                    ./actor.sh ${act_port} $epoch ${first_time} $scheme_ $dir $act_id $downl $upl $del 0 $qs $max_steps
                    pids="$pids $!"
                    act_id=$((act_id+1))
