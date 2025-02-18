@@ -1,3 +1,20 @@
+# TSNE Visualization Experiment
+
+For this experiment, the goal was to visualize various environment states using t-SNE.
+In order to recreate the results, follow the general setup instructions below and replace models folder with the right models. 
+You can edit the orca.sh script to edit dl_val, del_val, and qs_val (specifically the multiplier value). Then run the following:
+```
+./build.sh
+```
+```
+./orca.sh 1 44444
+```
+Using a config file state_config.txt, envwrapper.py should know what file to save states to. These will be saved in a directory state_collection under rl-module.
+
+Using the tsne_embedding.ipynb, one can plot the environment states stored in state_collection.
+
+Values used for the included plot generation (dl, del, qs): 12, 10, 2; 48, 5, 2; 48, 10, 2; 48, 80, 2; 192, 10, 2
+
 # Orca v1.0
 
 This release presents the source code and materials used for the experiments in our SIGCOMM'20 paper: "Classic Meets Modern: A Pragmatic Learning-Based Congestion Control for the Internet" (https://dl.acm.org/doi/abs/10.1145/3387514.3405892).
