@@ -24,6 +24,8 @@
     "eval_frequency": 1000,
     "state_dim": 23,
     "input_dim": 21,
+    "orca_state_dim": 7,
+    "orca_input_dim": 15,
     "action_dim": 1,
     "delay_margin_coef": 1.25,
     "remote": true,

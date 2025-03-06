@@ -24,7 +24,7 @@ import threading
 import logging
 import tensorflow as tf
 import sys
-from agent import Agent
+from agent import Agent, Agent2
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import argparse
@@ -249,6 +249,13 @@ def main():
                         h2_shape=params.dict['h2_shape'],stddev=params.dict['stddev'],mem_size=params.dict['memsize'],gamma=params.dict['gamma'],
                         lr_c=params.dict['lr_c'],lr_a=params.dict['lr_a'],tau=params.dict['tau'],PER=params.dict['PER'],CDQ=params.dict['CDQ'],
                         LOSS_TYPE=params.dict['LOSS_TYPE'],noise_type=params.dict['noise_type'],noise_exp=params.dict['noise_exp'])
+            
+            graph2 = tf.Graph()
+            with graph2.as_default():
+                agent2 = Agent2(70, a_dim, batch_size=params.dict['batch_size'], summary=summary_writer,h1_shape=params.dict['h1_shape'],
+                            h2_shape=params.dict['h2_shape'],stddev=params.dict['stddev'],mem_size=params.dict['memsize'],gamma=params.dict['gamma'],
+                            lr_c=params.dict['lr_c'],lr_a=params.dict['lr_a'],tau=params.dict['tau'],PER=params.dict['PER'],CDQ=params.dict['CDQ'],
+                            LOSS_TYPE=params.dict['LOSS_TYPE'],noise_type=params.dict['noise_type'],noise_exp=params.dict['noise_exp'])
 
             dtypes = [tf.float32, tf.float32, tf.float32, tf.float32, tf.float32]
             shapes = [[s_dim], [a_dim], [1], [s_dim], [1]]
@@ -308,6 +315,7 @@ def main():
         tfconfig = tf.ConfigProto(allow_soft_placement=True)
         print("Checkpoint dir:", params.dict['ckptdir'])
 
+        orca_ckptdir = "/users/edwardhu/Orca/models/"
         if params.dict['single_actor_eval']:
             mon_sess = tf.train.SingularMonitoredSession(
                 checkpoint_dir=params.dict['ckptdir'])
@@ -320,8 +328,21 @@ def main():
                     checkpoint_dir=params.dict['ckptdir'],
                     config=tfconfig,
                     hooks=None)
+            with graph2.as_default():
+                mon_sess_2 = tf.train.MonitoredTrainingSession(master=server.target,
+                        save_checkpoint_secs=None,
+                        save_summaries_secs=None,
+                        save_summaries_steps=None,
+                        is_chief=is_learner,
+                        checkpoint_dir=orca_ckptdir,
+                        config=tfconfig,
+                        hooks=None)
+                agent2.assign_sess(mon_sess_2)
+                print("Restored Orca model!!!!!!!!!!!!!!!!!!")
 
+        # agent.assign_sess(mon_sess)
         agent.assign_sess(mon_sess)
+        agent2.assign_sess(mon_sess_2)
 
 
         if is_learner:
