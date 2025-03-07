@@ -46,8 +46,8 @@ def create_input_op_shape(obs, tensor):
 
 
 
-def evaluate_TCP(env, agent, epoch, summary_writer, params, s0_rec_buffer, eval_step_counter):
-
+def evaluate_TCP(env, agent, agent2, epoch, summary_writer, params, s0_rec_buffer, eval_step_counter):
+    print("eval tcppppppppppppppppppppppppppppp")
 
     score_list = []
 
@@ -75,7 +75,7 @@ def evaluate_TCP(env, agent, epoch, summary_writer, params, s0_rec_buffer, eval_
             eval_step_counter += 1
             step_counter += 1
 
-            s1, r, terminal, error_code = env.step(a, eval_=True)
+            s1, full_s1, r, terminal, error_code = env.step(a, agent2=agent2, s0_rec_buffer=s0_rec_buffer, eval_=True)
 
             if error_code == True:
                 s1_rec_buffer = np.concatenate( (s0_rec_buffer[params.dict['state_dim']:], s1) )
@@ -215,12 +215,15 @@ def main():
 
 
     s_dim, a_dim = env_peek.get_dims_info()
+    orca_s_dim, _ = env_peek.orca_get_dims_info()
     action_scale, action_range = env_peek.get_action_info()
 
     if not params.dict['use_TCP']:
         params.dict['state_dim'] = s_dim
+        params.dict['orca_state_dim'] = orca_s_dim
     if params.dict['recurrent']:
         s_dim = s_dim * params.dict['rec_dim']
+        orca_s_dim = orca_s_dim * params.dict['rec_dim']
 
 
     if params.dict['use_hard_target'] == True:
@@ -252,7 +255,7 @@ def main():
             
             graph2 = tf.Graph()
             with graph2.as_default():
-                agent2 = Agent2(70, a_dim, batch_size=params.dict['batch_size'], summary=summary_writer,h1_shape=params.dict['h1_shape'],
+                agent2 = Agent2(orca_s_dim, a_dim, batch_size=params.dict['batch_size'], summary=summary_writer,h1_shape=params.dict['h1_shape'],
                             h2_shape=params.dict['h2_shape'],stddev=params.dict['stddev'],mem_size=params.dict['memsize'],gamma=params.dict['gamma'],
                             lr_c=params.dict['lr_c'],lr_a=params.dict['lr_a'],tau=params.dict['tau'],PER=params.dict['PER'],CDQ=params.dict['CDQ'],
                             LOSS_TYPE=params.dict['LOSS_TYPE'],noise_type=params.dict['noise_type'],noise_exp=params.dict['noise_exp'])
@@ -342,7 +345,6 @@ def main():
 
         # agent.assign_sess(mon_sess)
         agent.assign_sess(mon_sess)
-        agent2.assign_sess(mon_sess_2)
 
 
         if is_learner:
@@ -398,7 +400,9 @@ def main():
                 s0 = env.reset()
                 s0_rec_buffer = np.zeros([s_dim])
                 s1_rec_buffer = np.zeros([s_dim])
+                s0_rec_buffer_original = np.zeros([orca_s_dim])
                 s0_rec_buffer[-1*params.dict['state_dim']:] = s0
+                s0_rec_buffer_original[-1*params.dict['orca_state_dim']:] = s0
 
 
                 if params.dict['recurrent']:
@@ -415,11 +419,12 @@ def main():
                     epoch += 1
 
                     step_counter += 1
-                    s1, r, terminal, error_code = env.step(a,eval_=config.eval)
+                    s1, full_s1, r, terminal, error_code = env.step(a, agent2=agent2, s0_rec_buffer=s0_rec_buffer_original, eval_=config.eval)
                     # print(f"s1: {s1}, r: {r}, terminal: {terminal}, error_code: {error_code}")
 
                     if error_code == True:
-                        s1_rec_buffer = np.concatenate( (s0_rec_buffer[params.dict['state_dim']:], s1) )
+                        s1_rec_buffer = np.concatenate( (s0_rec_buffer[params.dict['state_dim']:], full_s1) )
+                        s1_original_buffer = np.concatenate( (s0_rec_buffer[params.dict['orca_state_dim']:], s1) )
 
                         if params.dict['recurrent']:
                             a1 = agent.get_action(s1_rec_buffer, not config.eval)
@@ -454,7 +459,7 @@ def main():
                             agent.actor_noise.reset()
 
                     if (epoch% params.dict['eval_frequency'] == 0):
-                        eval_step_counter = evaluate_TCP(env, agent, epoch, summary_writer, params, s0_rec_buffer, eval_step_counter)
+                        eval_step_counter = evaluate_TCP(env, agent, agent2, epoch, summary_writer, params, s0_rec_buffer, eval_step_counter)
 
 
                 print("total time:", time.time()-start)

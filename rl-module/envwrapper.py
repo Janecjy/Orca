@@ -172,6 +172,9 @@ class TCP_Env_Wrapper(object):
 
     def get_dims_info(self):
         return self.params.dict['state_dim'], self.params.dict['action_dim']
+    
+    def orca_get_dims_info(self):
+        return self.params.dict['orca_state_dim'], self.params.dict['action_dim']
 
     def get_action_info(self):
         action_scale = np.array([1.])
@@ -182,8 +185,8 @@ class TCP_Env_Wrapper(object):
     def reset(self):
         # start signal
         self.shrmem_w.write(str(99999) + " " + str(99999) + "\0")
-        state, delay_, rew0, error_code  = self.get_state()
-        return state
+        state, full_state, delay_, rew0, error_code  = self.get_state()
+        return full_state
 
     def test(self):
         print("Hello")
@@ -272,7 +275,7 @@ class TCP_Env_Wrapper(object):
             self.current_transformer_embedding = emb_cpu.astype(np.float32)
 
 
-    def get_state(self, evaluation=False):
+    def get_state(self, agent2=None, s0_rec_buffer=None, evaluation=False):
         succeed = False
         error_cnt=0
         while(1):
@@ -423,6 +426,7 @@ class TCP_Env_Wrapper(object):
             state=np.append(state,[delta_t_n])
             state=np.append(state,[min_rtt_min/srtt_ms_min])
             state=np.append(state,[delay_metric])
+            # state: (7, 1)
             # -------------------------------------------------------
             # 1) We read s0 from shared memory
             # 2) Once we parse s0, we add to raw_feature_buffer and maybe create a new token
@@ -463,12 +467,24 @@ class TCP_Env_Wrapper(object):
             # We'll do:
 
             # logger.info(f"transformer_embedding: {self.current_transformer_embedding}")
-            state = np.concatenate([state, self.current_transformer_embedding], axis=0)
+            print("-----------------------")
+            print(state)
+            print("buffer~!!!!!!")
+            if s0_rec_buffer is not None:
+                print(len(state))
+                print(len(s0_rec_buffer))
+            # print(s0_rec_buffer)
+            print(agent2)
+            if agent2 is not None:
+                hidden_out = agent2.get_action_hidden(s0_rec_buffer)
+                print(hidden_out)
+            
+            full_state = np.concatenate([state, self.current_transformer_embedding], axis=0)
 
             self.prev_rid = rid
-            return state, d, reward, True
+            return state, full_state, d, reward, True
         else:
-            return state, 0.0, reward, False
+            return state, full_state, 0.0, reward, False
 
     def map_action(self, action):
         out = math.pow(4, action)
@@ -490,10 +506,10 @@ class TCP_Env_Wrapper(object):
         self.wid = (self.wid + 1) % 1000
         pass
 
-    def step(self, action, eval_=False):
-        s1, delay_, rew0, error_code  = self.get_state(evaluation=eval_)
+    def step(self, action, agent2=None, s0_rec_buffer=None, eval_=False):
+        s1, full_s1, delay_, rew0, error_code  = self.get_state(agent2=agent2, s0_rec_buffer=s0_rec_buffer, evaluation=eval_)
 
-        return s1, rew0, False, error_code
+        return s1, full_s1, rew0, False, error_code
 
 
 class Moving_Win():

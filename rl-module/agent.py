@@ -69,6 +69,36 @@ class Actor():
 
 
         return scale_output
+    
+    
+class Actor2():
+    def __init__(self, s_dim, a_dim,h1_shape,h2_shape, action_scale=1.0, name='actor'):
+        self.s_dim = s_dim
+        self.a_dim = a_dim
+        self.name = name
+        self.action_scale = action_scale
+        self.h1_shape = h1_shape
+        self.h2_shape = h2_shape
+
+    def train_var(self):
+        return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.name)
+
+    def build(self, s, is_training):
+        
+        with tf.variable_scope(self.name, reuse=tf.AUTO_REUSE):
+            
+            h1 = tf.layers.dense(s, units=self.h1_shape, name='fc1')
+            h1 = tf.layers.batch_normalization(h1, training=is_training, scale=False)
+            h1 = tf.nn.leaky_relu(h1)
+            
+            h2 = tf.layers.dense(h1, units=self.h2_shape,  name='fc2')
+            h2 = tf.layers.batch_normalization(h2, training=is_training, scale=False)
+            h2 = tf.nn.leaky_relu(h2)
+            
+            dense_output = tf.layers.dense(h2, units=self.a_dim, activation=tf.nn.tanh)
+            
+            scale_output = tf.multiply(dense_output, self.action_scale)
+        return scale_output, dense_output
 
 
 class Critic():
@@ -459,10 +489,10 @@ class Agent2():
             self.actor_noise = OU_Noise(mu=np.zeros(a_dim), sigma=float(self.stddev) * np.ones(a_dim),dt=0.5)
 
         # Main Actor/Critic Network
-        self.actor = Actor(self.s_dim, self.a_dim, action_scale=action_scale,h1_shape=self.h1_shape,h2_shape=self.h2_shape)
+        self.actor = Actor2(self.s_dim, self.a_dim, action_scale=action_scale,h1_shape=self.h1_shape,h2_shape=self.h2_shape)
         self.critic = Critic(self.s_dim, self.a_dim, action_scale=action_scale,h1_shape=self.h1_shape,h2_shape=self.h2_shape)
         self.critic2 = Critic(self.s_dim, self.a_dim, action_scale=action_scale, name='critic2',h1_shape=self.h1_shape,h2_shape=self.h2_shape)
-        self.actor_out = self.actor.build(self.s0, self.is_training)
+        self.actor_out, self.dense_out = self.actor.build(self.s0, self.is_training)
         self.critic_out = self.critic.build(self.s0, self.action)
         self.critic_out2 = self.critic2.build(self.s0, self.action)
         self.critic_actor_out = self.critic.build(self.s0, self.actor_out)
@@ -620,6 +650,11 @@ class Agent2():
             action += noise
             action = np.clip(action, self.action_range[0], self.action_range[1])
         return action
+    
+    def get_action_hidden(self, s, use_noise=True):
+        fd = {self.s0: create_input_op_shape(s, self.s0), self.is_training:False}
+        hidden_out = self.sess.run([self.dense_out], feed_dict=fd)
+        return hidden_out
 
     def get_q(self, s, a):
 
