@@ -46,7 +46,7 @@ def create_input_op_shape(obs, tensor):
 
 
 
-def evaluate_TCP(env, agent, agent2, epoch, summary_writer, params, s0_rec_buffer, eval_step_counter):
+def evaluate_TCP(env, agent, agent2, epoch, summary_writer, params, s0_rec_buffer, orca_s0_rec_buffer, eval_step_counter):
     print("eval tcppppppppppppppppppppppppppppp")
 
     score_list = []
@@ -75,7 +75,7 @@ def evaluate_TCP(env, agent, agent2, epoch, summary_writer, params, s0_rec_buffe
             eval_step_counter += 1
             step_counter += 1
 
-            s1, full_s1, r, terminal, error_code = env.step(a, agent2=agent2, s0_rec_buffer=s0_rec_buffer, eval_=True)
+            orca_s1, s1, r, terminal, error_code = env.step(a, agent2=agent2, orca_s0_rec_buffer=orca_s0_rec_buffer, eval_=True)
 
             if error_code == True:
                 s1_rec_buffer = np.concatenate( (s0_rec_buffer[params.dict['state_dim']:], s1) )
@@ -223,7 +223,7 @@ def main():
         params.dict['orca_state_dim'] = orca_s_dim
     if params.dict['recurrent']:
         s_dim = s_dim * params.dict['rec_dim']
-        orca_s_dim = orca_s_dim * params.dict['rec_dim']
+    orca_s_dim = orca_s_dim * params.dict['rec_dim']
 
 
     if params.dict['use_hard_target'] == True:
@@ -397,12 +397,13 @@ def main():
                 start = time.time()
                 step_counter = np.int64(0)
                 eval_step_counter = np.int64(0)
-                s0 = env.reset()
+                orca_s0, s0 = env.reset()
                 s0_rec_buffer = np.zeros([s_dim])
                 s1_rec_buffer = np.zeros([s_dim])
-                s0_rec_buffer_original = np.zeros([orca_s_dim])
+                orca_s0_rec_buffer = np.zeros([orca_s_dim])
+                orca_s1_rec_buffer = np.zeros([orca_s_dim])
                 s0_rec_buffer[-1*params.dict['state_dim']:] = s0
-                s0_rec_buffer_original[-1*params.dict['orca_state_dim']:] = s0
+                orca_s0_rec_buffer[-1*params.dict['orca_state_dim']:] = orca_s0
 
 
                 if params.dict['recurrent']:
@@ -419,12 +420,12 @@ def main():
                     epoch += 1
 
                     step_counter += 1
-                    s1, full_s1, r, terminal, error_code = env.step(a, agent2=agent2, s0_rec_buffer=s0_rec_buffer_original, eval_=config.eval)
+                    orca_s1, s1, r, terminal, error_code = env.step(a, agent2=agent2, orca_s0_rec_buffer=orca_s0_rec_buffer, eval_=config.eval)
                     # print(f"s1: {s1}, r: {r}, terminal: {terminal}, error_code: {error_code}")
 
                     if error_code == True:
-                        s1_rec_buffer = np.concatenate( (s0_rec_buffer[params.dict['state_dim']:], full_s1) )
-                        s1_original_buffer = np.concatenate( (s0_rec_buffer[params.dict['orca_state_dim']:], s1) )
+                        s1_rec_buffer = np.concatenate( (s0_rec_buffer[params.dict['state_dim']:], s1) )
+                        orca_s1_rec_buffer = np.concatenate( (orca_s0_rec_buffer[params.dict['orca_state_dim']:], orca_s1) )
 
                         if params.dict['recurrent']:
                             a1 = agent.get_action(s1_rec_buffer, not config.eval)
@@ -450,16 +451,18 @@ def main():
                         mon_sess.run(actor_op, feed_dict=fd)
 
                     s0 = s1
+                    orca_s0 = orca_s1
                     a = a1
                     if params.dict['recurrent']:
                         s0_rec_buffer = s1_rec_buffer
+                    orca_s0_rec_buffer = orca_s1_rec_buffer
 
                     if not params.dict['use_TCP'] and (terminal):
                         if agent.actor_noise != None:
                             agent.actor_noise.reset()
 
                     if (epoch% params.dict['eval_frequency'] == 0):
-                        eval_step_counter = evaluate_TCP(env, agent, agent2, epoch, summary_writer, params, s0_rec_buffer, eval_step_counter)
+                        eval_step_counter = evaluate_TCP(env, agent, agent2, epoch, summary_writer, params, s0_rec_buffer, orca_s0_rec_buffer, eval_step_counter)
 
 
                 print("total time:", time.time()-start)

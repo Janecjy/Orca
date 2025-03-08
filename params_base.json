@@ -13,7 +13,7 @@
     "use_normalizer": false,
     "h1_shape": 256,
     "h2_shape": 256,
-    "recurrent": true,
+    "recurrent": false,
     "rec_dim": 10,
     "noise_type": 3,
     "noise_exp": 50000,
