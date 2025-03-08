@@ -46,7 +46,7 @@ def create_input_op_shape(obs, tensor):
 
 
 
-def evaluate_TCP(env, agent, agent2, epoch, summary_writer, params, s0_rec_buffer, orca_s0_rec_buffer, eval_step_counter):
+def evaluate_TCP(env, agent, agent2, epoch, summary_writer, params, s0_rec_buffer, orca_s0_rec_buffer, s0, eval_step_counter):
     print("eval tcppppppppppppppppppppppppppppp")
 
     score_list = []
@@ -464,7 +464,7 @@ def main():
                             agent.actor_noise.reset()
 
                     if (epoch% params.dict['eval_frequency'] == 0):
-                        eval_step_counter = evaluate_TCP(env, agent, agent2, epoch, summary_writer, params, s0_rec_buffer, orca_s0_rec_buffer, eval_step_counter)
+                        eval_step_counter = evaluate_TCP(env, agent, agent2, epoch, summary_writer, params, s0_rec_buffer, orca_s0_rec_buffer, s0, eval_step_counter)
 
 
                 print("total time:", time.time()-start)

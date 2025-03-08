@@ -98,7 +98,7 @@ class Actor2():
             dense_output = tf.layers.dense(h2, units=self.a_dim, activation=tf.nn.tanh)
             
             scale_output = tf.multiply(dense_output, self.action_scale)
-        return scale_output, dense_output
+        return scale_output, dense_output, h2
 
 
 class Critic():
@@ -492,7 +492,7 @@ class Agent2():
         self.actor = Actor2(self.s_dim, self.a_dim, action_scale=action_scale,h1_shape=self.h1_shape,h2_shape=self.h2_shape)
         self.critic = Critic(self.s_dim, self.a_dim, action_scale=action_scale,h1_shape=self.h1_shape,h2_shape=self.h2_shape)
         self.critic2 = Critic(self.s_dim, self.a_dim, action_scale=action_scale, name='critic2',h1_shape=self.h1_shape,h2_shape=self.h2_shape)
-        self.actor_out, self.dense_out = self.actor.build(self.s0, self.is_training)
+        self.actor_out, self.dense_out, self.h2 = self.actor.build(self.s0, self.is_training)
         self.critic_out = self.critic.build(self.s0, self.action)
         self.critic_out2 = self.critic2.build(self.s0, self.action)
         self.critic_actor_out = self.critic.build(self.s0, self.actor_out)
@@ -653,8 +653,9 @@ class Agent2():
     
     def get_action_hidden(self, s, use_noise=True):
         fd = {self.s0: create_input_op_shape(s, self.s0), self.is_training:False}
-        hidden_out = self.sess.run([self.dense_out], feed_dict=fd)
-        return hidden_out
+        action_out = self.sess.run([self.dense_out], feed_dict=fd)
+        hidden_out = self.sess.run([self.h2], feed_dict=fd)
+        return action_out, hidden_out
 
     def get_q(self, s, a):
 

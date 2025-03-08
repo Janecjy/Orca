@@ -476,18 +476,20 @@ class TCP_Env_Wrapper(object):
             # print(s0_rec_buffer)
             # print(agent2)
             if agent2 is not None:
-                hidden_out = agent2.get_action_hidden(orca_s0_rec_buffer)
+                action = agent2.get_action(orca_s0_rec_buffer)
                 # print("hidden_out:")
             # Convert hidden_out from list-of-array to a true NumPy array
-            hidden_out = np.array(hidden_out)  # shape might be (1,1,1)
+            action = np.array(action)
+            # hidden_out = np.array(hidden_out)  # shape might be (1,1,1)
 
-            # Flatten it down to 1D
-            hidden_out = hidden_out.ravel()    # now shape is (1,) if there's only one value
+            # # Flatten it down to 1D
+            # hidden_out = hidden_out.ravel()    # now shape is (1,) if there's only one value
+            action = action.ravel()
             # print(len(hidden_out))
             # print(hidden_out)
             # print(len(self.current_transformer_embedding))
             # print(self.current_transformer_embedding)
-            state = np.concatenate([hidden_out, self.current_transformer_embedding], axis=0)
+            state = np.concatenate([action, self.current_transformer_embedding], axis=0)
 
             self.prev_rid = rid
             return orca_state, state, d, reward, True
