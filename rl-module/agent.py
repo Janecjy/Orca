@@ -653,9 +653,9 @@ class Agent2():
     
     def get_action_hidden(self, s, use_noise=True):
         fd = {self.s0: create_input_op_shape(s, self.s0), self.is_training:False}
-        action_out = self.sess.run([self.dense_out], feed_dict=fd)
+        # action_out = self.sess.run([self.dense_out], feed_dict=fd)
         hidden_out = self.sess.run([self.h2], feed_dict=fd)
-        return action_out, hidden_out
+        return hidden_out
 
     def get_q(self, s, a):
 

@@ -22,7 +22,7 @@
     "max_eps_steps": 64,
     "max_epochs": 1000000,
     "eval_frequency": 1000,
-    "state_dim": 17,
+    "state_dim": 272,
     "input_dim": 21,
     "orca_state_dim": 7,
     "orca_input_dim": 15,
