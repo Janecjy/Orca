@@ -259,6 +259,7 @@ def main():
                             h2_shape=params.dict['h2_shape'],stddev=params.dict['stddev'],mem_size=params.dict['memsize'],gamma=params.dict['gamma'],
                             lr_c=params.dict['lr_c'],lr_a=params.dict['lr_a'],tau=params.dict['tau'],PER=params.dict['PER'],CDQ=params.dict['CDQ'],
                             LOSS_TYPE=params.dict['LOSS_TYPE'],noise_type=params.dict['noise_type'],noise_exp=params.dict['noise_exp'])
+                print("agent2 initialize")
 
             dtypes = [tf.float32, tf.float32, tf.float32, tf.float32, tf.float32]
             shapes = [[s_dim], [a_dim], [1], [s_dim], [1]]
@@ -397,11 +398,11 @@ def main():
                 start = time.time()
                 step_counter = np.int64(0)
                 eval_step_counter = np.int64(0)
-                orca_s0, s0 = env.reset()
                 s0_rec_buffer = np.zeros([s_dim])
                 s1_rec_buffer = np.zeros([s_dim])
                 orca_s0_rec_buffer = np.zeros([orca_s_dim])
                 orca_s1_rec_buffer = np.zeros([orca_s_dim])
+                orca_s0, s0 = env.reset(agent2, orca_s0_rec_buffer)
                 s0_rec_buffer[-1*params.dict['state_dim']:] = s0
                 orca_s0_rec_buffer[-1*params.dict['orca_state_dim']:] = orca_s0
 
@@ -420,6 +421,7 @@ def main():
                     epoch += 1
 
                     step_counter += 1
+                    # print("Before step agent2 {agent2}")
                     orca_s1, s1, r, terminal, error_code = env.step(a, agent2=agent2, orca_s0_rec_buffer=orca_s0_rec_buffer, eval_=config.eval)
                     # print(f"s1: {s1}, r: {r}, terminal: {terminal}, error_code: {error_code}")
 
