@@ -273,6 +273,7 @@ class TCP_Env_Wrapper(object):
 
 
     def get_state(self, evaluation=False):
+        embedding = None
         succeed = False
         error_cnt=0
         while(1):
@@ -455,6 +456,7 @@ class TCP_Env_Wrapper(object):
             #    do we run the transformer to get a new embedding.
             if new_token_created and len(self.token_window) == self.max_token_window_size:
                 self.update_transformer_embedding()
+                embedding = self.current_transformer_embedding
 
             # -------------------------------------------------------
             # Then finally, we append `transformer_embedding` to the state.
@@ -463,12 +465,12 @@ class TCP_Env_Wrapper(object):
             # We'll do:
 
             # logger.info(f"transformer_embedding: {self.current_transformer_embedding}")
-            state = np.concatenate([state, self.current_transformer_embedding], axis=0)
+            # state = np.concatenate([state, self.current_transformer_embedding], axis=0)
 
             self.prev_rid = rid
-            return state, d, reward, True
+            return state, d, reward, True, embedding
         else:
-            return state, 0.0, reward, False
+            return state, 0.0, reward, False, embedding
 
     def map_action(self, action):
         out = math.pow(4, action)
@@ -491,9 +493,9 @@ class TCP_Env_Wrapper(object):
         pass
 
     def step(self, action, eval_=False):
-        s1, delay_, rew0, error_code  = self.get_state(evaluation=eval_)
+        s1, delay_, rew0, error_code, embedding  = self.get_state(evaluation=eval_)
 
-        return s1, rew0, False, error_code
+        return s1, rew0, False, error_code, embedding
 
 
 class Moving_Win():

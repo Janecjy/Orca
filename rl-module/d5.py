@@ -46,7 +46,7 @@ def create_input_op_shape(obs, tensor):
 
 
 
-def evaluate_TCP(env, agent, epoch, summary_writer, params, s0_rec_buffer, eval_step_counter):
+def evaluate_TCP(env, agent, epoch, summary_writer, params, s0_rec_buffer, eval_step_counter, embedding):
 
 
     score_list = []
@@ -63,7 +63,8 @@ def evaluate_TCP(env, agent, epoch, summary_writer, params, s0_rec_buffer, eval_
             s0 = env.reset()
 
         if params.dict['recurrent']:
-            a = agent.get_action(s0_rec_buffer, False)
+            s0_with_embedding = np.concatenate((s0_rec_buffer, embedding))
+            a = agent.get_action(s0_with_embedding, False)
         else:
             a = agent.get_action(s0, False)
         a = a[0][0]
@@ -81,7 +82,8 @@ def evaluate_TCP(env, agent, epoch, summary_writer, params, s0_rec_buffer, eval_
                 s1_rec_buffer = np.concatenate( (s0_rec_buffer[params.dict['state_dim']:], s1) )
 
                 if params.dict['recurrent']:
-                    a1 = agent.get_action(s1_rec_buffer, False)
+                    s1_with_embedding = np.concatenate((s1_rec_buffer, embedding))
+                    a1 = agent.get_action(s1_with_embedding, False)
                 else:
                     a1 = agent.get_action(s1, False)
 
@@ -220,7 +222,7 @@ def main():
     if not params.dict['use_TCP']:
         params.dict['state_dim'] = s_dim
     if params.dict['recurrent']:
-        s_dim = s_dim * params.dict['rec_dim']
+        s_dim = s_dim * params.dict['rec_dim'] + params.dict['embedding_dim']
 
 
     if params.dict['use_hard_target'] == True:
@@ -375,13 +377,15 @@ def main():
                 step_counter = np.int64(0)
                 eval_step_counter = np.int64(0)
                 s0 = env.reset()
-                s0_rec_buffer = np.zeros([s_dim])
-                s1_rec_buffer = np.zeros([s_dim])
+                s0_rec_buffer = np.zeros([s_dim-params.dict['embedding_dim']])
+                s1_rec_buffer = np.zeros([s_dim-params.dict['embedding_dim']])
+                embedding = np.zeros([params.dict['embedding_dim']])
                 s0_rec_buffer[-1*params.dict['state_dim']:] = s0
 
 
                 if params.dict['recurrent']:
-                    a = agent.get_action(s0_rec_buffer,not config.eval)
+                    s0_with_embedding = np.concatenate( (s0_rec_buffer, embedding) )
+                    a = agent.get_action(s0_with_embedding,not config.eval)
                 else:
                     a = agent.get_action(s0, not config.eval)
                 a = a[0][0]
@@ -394,14 +398,17 @@ def main():
                     epoch += 1
 
                     step_counter += 1
-                    s1, r, terminal, error_code = env.step(a,eval_=config.eval)
+                    s1, r, terminal, error_code, new_embedding = env.step(a,eval_=config.eval)
+                    if new_embedding:
+                        embedding = new_embedding
                     # print(f"s1: {s1}, r: {r}, terminal: {terminal}, error_code: {error_code}")
 
                     if error_code == True:
                         s1_rec_buffer = np.concatenate( (s0_rec_buffer[params.dict['state_dim']:], s1) )
 
                         if params.dict['recurrent']:
-                            a1 = agent.get_action(s1_rec_buffer, not config.eval)
+                            s1_with_embedding = np.concatenate((s1_rec_buffer, embedding))
+                            a1 = agent.get_action(s1_with_embedding, not config.eval)
                         else:
                             a1 = agent.get_action(s1,not config.eval)
 
@@ -416,7 +423,9 @@ def main():
                         continue
 
                     if params.dict['recurrent']:
-                        fd = {a_s0:s0_rec_buffer, a_action:a, a_reward:np.array([r]), a_s1:s1_rec_buffer, a_terminal:np.array([terminal], np.float)}
+                        s0_with_embedding = np.concatenate((s0_rec_buffer, embedding))
+                        s1_with_embedding = np.concatenate((s1_rec_buffer, embedding))
+                        fd = {a_s0:s0_with_embedding, a_action:a, a_reward:np.array([r]), a_s1:s1_with_embedding, a_terminal:np.array([terminal], np.float)}
                     else:
                         fd = {a_s0:s0, a_action:a, a_reward:np.array([r]), a_s1:s1, a_terminal:np.array([terminal], np.float)}
 
@@ -433,7 +442,7 @@ def main():
                             agent.actor_noise.reset()
 
                     if (epoch% params.dict['eval_frequency'] == 0):
-                        eval_step_counter = evaluate_TCP(env, agent, epoch, summary_writer, params, s0_rec_buffer, eval_step_counter)
+                        eval_step_counter = evaluate_TCP(env, agent, epoch, summary_writer, params, s0_rec_buffer, eval_step_counter, embedding)
 
 
                 print("total time:", time.time()-start)
