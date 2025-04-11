@@ -25,6 +25,8 @@
     "state_dim": 7,
     "input_dim": 5,
     "embedding_dim": 16,
+    "unum_model_path": "",
+    "unum_boundary_path": "",
     "action_dim": 1,
     "delay_margin_coef": 1.25,
     "remote": true,

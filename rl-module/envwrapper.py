@@ -142,8 +142,8 @@ class TCP_Env_Wrapper(object):
 
             # A reference to your trained Transformer model
             self.DEVICE = 'cpu'
-            self.transformer_model = torch.load('models/RTT-Checkpoint-BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-809iter.p', map_location=self.DEVICE)
-            with open('models/RTT-Checkpoint-BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-809iter.p', "rb") as f:
+            self.transformer_model = torch.load(params.dict['unum_model_path'], map_location=self.DEVICE)
+            with open(params.dict['unum_boundary_path']) as f:
                 self.boundaries_dict = pickle.load(f)
 
             self.use_normalizer=use_normalizer
