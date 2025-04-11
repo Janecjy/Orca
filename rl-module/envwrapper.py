@@ -30,6 +30,7 @@ import os
 import sysv_ipc
 import signal
 import sys
+import pickle
 from time import sleep
 from models import create_mask
 
@@ -142,13 +143,8 @@ class TCP_Env_Wrapper(object):
             # A reference to your trained Transformer model
             self.DEVICE = 'cpu'
             self.transformer_model = torch.load('models/RTT-Checkpoint-BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-809iter.p', map_location=self.DEVICE)
-            self.bucket_boundaries_ccbench = {
-                1: [0.12, 0.2, 0.28, 0.43, 0.55, 0.83, 1.03, 1.63, 2.12, 4.02, 8, 12],
-                2: [0.01, 0.3, 0.38, 0.44, 0.49, 0.54, 0.6, 0.68, 0.84, 1.41, 3, 5],
-                3: [0.08, 0.11, 0.15, 0.23, 0.45, 0.8, 0.9, 1, 1.75],
-                4: [0.0002, 0.0047, 0.0361, 0.1, 0.2, 0.3],
-                5: [0.75, 1, 1.001, 1.003, 1.012, 1.25]
-            }
+            with open('models/RTT-Checkpoint-BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-809iter.p', "rb") as f:
+                self.boundaries_dict = pickle.load(f)
 
             self.use_normalizer=use_normalizer
             if self.use_normalizer==True:
@@ -188,6 +184,12 @@ class TCP_Env_Wrapper(object):
     def test(self):
         print("Hello")
 
+    def bucketize_value(value, boundaries):
+        if not boundaries:
+            return 0
+        idx = np.searchsorted(boundaries, value, side='left')
+        return idx
+
     def compute_token(self):
         """
         raw_feature_buffer: list of [(f6, dt), ...] 
@@ -213,23 +215,21 @@ class TCP_Env_Wrapper(object):
 
         # avg_features[0] is base_rtt. We min-max normalize it:
         base_rtt_val = avg_features[0]*2/100
-        if np.isclose(self.rtt_min, self.rtt_max):
-            normalized_rtt = 0.0
-        else:
-            normalized_rtt = (base_rtt_val - self.rtt_min) / (self.rtt_max - self.rtt_min)
+        # if np.isclose(self.rtt_min, self.rtt_max):
+        #     normalized_rtt = 0.0
+        # else:
+        #     normalized_rtt = (base_rtt_val - self.rtt_min) / (self.rtt_max - self.rtt_min)
         
         # For features 1..5, do bucketization
         # feature 1 = avg_features[1], feature 2 = avg_features[2], ...
         # boundaries are in your self.bucket_boundaries_ccbench dictionary
-        token = [normalized_rtt]  # first slot is normalized base_rtt
+        token = [base_rtt_val]  # first slot is normalized base_rtt
+
         for feat_idx in range(1, 6):
-            boundaries = self.bucket_boundaries_ccbench[feat_idx]
             val = avg_features[feat_idx]
-            # local bin index
-            bin_local = np.searchsorted(boundaries, val, side='right')
-            # We often want to offset these bins in a big vocabulary,
-            # but for a single token we can just store bin_local directly
-            token.append(bin_local)
+            bds = self.boundaries_dict.get(feat_idx, [])
+            b_idx = self.bucketize_value(val, bds)
+            token.append(b_idx)
         
         return np.array(token, dtype=np.float32)
 
