@@ -1,0 +1,24 @@
+{
+  "actor_nodes": {
+    "1": "clnode166",
+    "2": "clnode125",
+    "3": "clnode103",
+    "4": "clnode152",
+    "5": "clnode145",
+    "6": "clnode171",
+    "7": "clnode138",
+    "8": "clnode137",
+    "9": "clnode150",
+    "10": "clnode124",
+    "11": "clnode159",
+    "12": "clnode143",
+    "13": "clnode158",
+    "14": "clnode142",
+    "15": "clnode117",
+    "16": "clnode144"
+  },
+  "username": "janechen",
+  "domain_suffix": ".clemson.cloudlab.us",
+  "log_dir": "/users/dinko/ConstrainedOrca/rl-module/training_log/seed124",
+  "ssh_key": null
+}
